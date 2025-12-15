@@ -7,11 +7,16 @@ on:
       - 'v*'  # v1.0.0 같은 태그를 푸시하면 빌드
   workflow_dispatch:  # 수동 실행 가능
 
+# GitHub Actions 권한 설정
+permissions:
+  contents: write  # Release 생성 권한
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false  # 한 플랫폼 실패해도 다른 플랫폼 계속 진행
       matrix:
         include:
           - os: windows-latest
@@ -33,11 +38,30 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev libx11-dev libxext-dev libxrender-dev libxinerama-dev libxi-dev libxrandr-dev libxcursor-dev libxtst-dev tk-dev
+
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install python-tk@3.11
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
+
+    - name: Verify installation
+      run: |
+        python --version
+        pip list
+        python -c "import tkinter; print('tkinter OK')"
+        python -c "import ttkbootstrap; print('ttkbootstrap OK')"
+        python -c "import PIL; print('PIL OK')"
 
     - name: Build with PyInstaller (Windows)
       if: matrix.os == 'windows-latest'
