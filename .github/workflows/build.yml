@@ -1,0 +1,64 @@
+name: Build YouTube Maker
+
+# 언제 실행할지 설정
+on:
+  push:
+    tags:
+      - 'v*'  # v1.0.0 같은 태그를 푸시하면 빌드
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: YouTubeMaker.exe
+            asset_name: YouTubeMaker-Windows.exe
+          - os: ubuntu-latest
+            artifact_name: YouTubeMaker
+            asset_name: YouTubeMaker-Linux
+          - os: macos-latest
+            artifact_name: YouTubeMaker
+            asset_name: YouTubeMaker-macOS
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build with PyInstaller (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        pyinstaller --onefile --windowed --name=YouTubeMaker --add-data="youtube_analyzer.py;." --add-data="config_manager.py;." --hidden-import=PIL --hidden-import=PIL._tkinter_finder --hidden-import=requests --hidden-import=googleapiclient --hidden-import=googleapiclient.discovery --hidden-import=googleapiclient.errors --hidden-import=ttkbootstrap --collect-all=ttkbootstrap --noconfirm app_final.py
+
+    - name: Build with PyInstaller (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        pyinstaller --onefile --windowed --name=YouTubeMaker --add-data="youtube_analyzer.py:." --add-data="config_manager.py:." --hidden-import=PIL --hidden-import=PIL._tkinter_finder --hidden-import=requests --hidden-import=googleapiclient --hidden-import=googleapiclient.discovery --hidden-import=googleapiclient.errors --hidden-import=ttkbootstrap --collect-all=ttkbootstrap --noconfirm app_final.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.asset_name }}
+        path: dist/${{ matrix.artifact_name }}
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/${{ matrix.artifact_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
