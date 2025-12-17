@@ -174,7 +174,7 @@ class GeminiScriptGenerator:
 5. 시간 표기는 정확하게 (예: 0:00-0:08, 0:08-0:16 등)
 
 이제 위의 형식을 정확히 따라 총 {total_cuts}개의 컷으로 구성된 대본을 작성해주세요.
-결과는 작성한 대본만 반환해주세요."""
+최종 결과는 작성한 대본만 반환해주세요."""
         
         return prompt
     
@@ -219,7 +219,7 @@ class GeminiScriptGenerator:
 4. 시청자의 관심을 끝까지 유지
 
 이제 위의 형식을 정확히 따라 총 {total_cuts}개의 컷으로 구성된 대본을 작성해주세요.
-결과는 작성한 대본만 반환해주세요."""
+최종 결과는 작성한 대본만 반환해주세요."""
     
     def test_connection(self) -> bool:
         """
