@@ -64,16 +64,16 @@ class YouTubeMakerApp:
         """API 키 입력 다이얼로그 표시"""
         dialog = tk.Toplevel(self.root)
         dialog.title("YouTube API 키 설정")
-        dialog.geometry("700x500")  # 너비 700, 높이 500으로 증가
+        dialog.geometry("1500x1000")  # 너비 700, 높이 500으로 증가
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         
         # 중앙 배치
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)  # 너비에 맞춰 중앙 계산
-        y = (dialog.winfo_screenheight() // 2) - (500 // 2)  # 높이에 맞춰 중앙 계산
-        dialog.geometry(f"700x500+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (1500 // 2)  # 너비에 맞춰 중앙 계산
+        y = (dialog.winfo_screenheight() // 2) - (1000 // 2)  # 높이에 맞춰 중앙 계산
+        dialog.geometry(f"1500x1000+{x}+{y}")
         
         api_key_result = [None]  # 결과 저장용
         
@@ -167,16 +167,16 @@ API 키 발급 방법:
         """Gemini API 키 입력 다이얼로그 표시"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Gemini API 키 설정")
-        dialog.geometry("700x500")  # 너비 700, 높이 500으로 증가
+        dialog.geometry("1500x1000")  # 너비 700, 높이 500으로 증가
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         
         # 중앙 배치
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)  # 너비에 맞춰 중앙 계산
-        y = (dialog.winfo_screenheight() // 2) - (500 // 2)  # 높이에 맞춰 중앙 계산
-        dialog.geometry(f"700x500+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (1500 // 2)  # 너비에 맞춰 중앙 계산
+        y = (dialog.winfo_screenheight() // 2) - (1000 // 2)  # 높이에 맞춰 중앙 계산
+        dialog.geometry(f"1500x1000+{x}+{y}")
         
         api_key_result = [None]  # 결과 저장용
         
