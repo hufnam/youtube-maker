@@ -1,7 +1,7 @@
 # config_manager.py
 """
 API 키 및 설정 관리 모듈
-사용자 설정을 로컬 파일에 안전하게 저장/로드
+YouTube API 키와 Gemini API 키를 별도로 관리
 """
 
 import os
@@ -35,9 +35,11 @@ class ConfigManager:
         except Exception:
             return ""
     
-    def save_api_key(self, api_key: str) -> bool:
+    # ========== YouTube API 키 관리 ==========
+    
+    def save_youtube_api_key(self, api_key: str) -> bool:
         """
-        API 키를 파일에 저장
+        YouTube API 키를 파일에 저장
         
         Args:
             api_key: YouTube API 키
@@ -47,29 +49,133 @@ class ConfigManager:
         """
         try:
             config = self.load_config()
-            config['api_key'] = self._encode_key(api_key)
+            config['youtube_api_key'] = self._encode_key(api_key)
             
             with open(self.config_file, 'w') as f:
                 json.dump(config, f, indent=2)
             
             return True
         except Exception as e:
-            print(f"API 키 저장 실패: {e}")
+            print(f"YouTube API 키 저장 실패: {e}")
             return False
     
-    def load_api_key(self) -> str:
+    def load_youtube_api_key(self) -> str:
         """
-        저장된 API 키를 로드
+        저장된 YouTube API 키를 로드
         
         Returns:
-            str: API 키 (없으면 빈 문자열)
+            str: YouTube API 키 (없으면 빈 문자열)
         """
         try:
             config = self.load_config()
-            encoded_key = config.get('api_key', '')
+            encoded_key = config.get('youtube_api_key', '')
             return self._decode_key(encoded_key)
         except Exception:
             return ""
+    
+    def has_youtube_api_key(self) -> bool:
+        """
+        저장된 YouTube API 키가 있는지 확인
+        
+        Returns:
+            bool: YouTube API 키 존재 여부
+        """
+        api_key = self.load_youtube_api_key()
+        return bool(api_key and len(api_key) > 10)
+    
+    def clear_youtube_api_key(self) -> bool:
+        """
+        저장된 YouTube API 키 삭제
+        
+        Returns:
+            bool: 삭제 성공 여부
+        """
+        return self.save_youtube_api_key("")
+    
+    # ========== Gemini API 키 관리 ==========
+    
+    def save_gemini_api_key(self, api_key: str) -> bool:
+        """
+        Gemini API 키를 파일에 저장
+        
+        Args:
+            api_key: Gemini API 키
+            
+        Returns:
+            bool: 저장 성공 여부
+        """
+        try:
+            config = self.load_config()
+            config['gemini_api_key'] = self._encode_key(api_key)
+            
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            return True
+        except Exception as e:
+            print(f"Gemini API 키 저장 실패: {e}")
+            return False
+    
+    def load_gemini_api_key(self) -> str:
+        """
+        저장된 Gemini API 키를 로드
+        
+        Returns:
+            str: Gemini API 키 (없으면 빈 문자열)
+        """
+        try:
+            config = self.load_config()
+            encoded_key = config.get('gemini_api_key', '')
+            return self._decode_key(encoded_key)
+        except Exception:
+            return ""
+    
+    def has_gemini_api_key(self) -> bool:
+        """
+        저장된 Gemini API 키가 있는지 확인
+        
+        Returns:
+            bool: Gemini API 키 존재 여부
+        """
+        api_key = self.load_gemini_api_key()
+        return bool(api_key and len(api_key) > 10)
+    
+    def clear_gemini_api_key(self) -> bool:
+        """
+        저장된 Gemini API 키 삭제
+        
+        Returns:
+            bool: 삭제 성공 여부
+        """
+        return self.save_gemini_api_key("")
+    
+    # ========== 호환성 유지 (기존 코드용) ==========
+    
+    def save_api_key(self, api_key: str) -> bool:
+        """
+        YouTube API 키 저장 (하위 호환성)
+        """
+        return self.save_youtube_api_key(api_key)
+    
+    def load_api_key(self) -> str:
+        """
+        YouTube API 키 로드 (하위 호환성)
+        """
+        return self.load_youtube_api_key()
+    
+    def has_api_key(self) -> bool:
+        """
+        YouTube API 키 존재 확인 (하위 호환성)
+        """
+        return self.has_youtube_api_key()
+    
+    def clear_api_key(self) -> bool:
+        """
+        YouTube API 키 삭제 (하위 호환성)
+        """
+        return self.clear_youtube_api_key()
+    
+    # ========== 공통 메서드 ==========
     
     def load_config(self) -> dict:
         """
@@ -123,25 +229,6 @@ class ConfigManager:
         """
         config = self.load_config()
         return config.get(key, default)
-    
-    def has_api_key(self) -> bool:
-        """
-        저장된 API 키가 있는지 확인
-        
-        Returns:
-            bool: API 키 존재 여부
-        """
-        api_key = self.load_api_key()
-        return bool(api_key and len(api_key) > 10)
-    
-    def clear_api_key(self) -> bool:
-        """
-        저장된 API 키 삭제
-        
-        Returns:
-            bool: 삭제 성공 여부
-        """
-        return self.save_api_key("")
     
     def clear_all(self) -> bool:
         """

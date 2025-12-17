@@ -1,11 +1,13 @@
 # app_final.py
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, scrolledtext
 import ttkbootstrap as tbs
 from ttkbootstrap.constants import *
 from ttkbootstrap.scrolled import ScrolledFrame
 from youtube_analyzer import YouTubeTrendAnalyzer
+from gemini_script_generator import GeminiScriptGenerator
 from config_manager import ConfigManager
+from prompt_template_manager import PromptTemplateManager
 from PIL import Image, ImageTk
 import sys
 import threading
@@ -23,26 +25,31 @@ class YouTubeMakerApp:
         # 설정 관리자 초기화
         self.config_manager = ConfigManager()
         
-        # API 키 로드 또는 입력 받기
+        # API 키 로드 (선택적)
         self.api_key = self.config_manager.load_api_key()
         
-        if not self.api_key:
-            # API 키가 없으면 입력 받기
-            self.api_key = self.show_api_key_dialog()
-            if not self.api_key:
-                messagebox.showerror("오류", "API 키가 필요합니다.\n프로그램을 종료합니다.")
-                sys.exit(1)
-            # 입력받은 API 키 저장
-            self.config_manager.save_api_key(self.api_key)
+        # YouTube Analyzer 초기화 (선택적)
+        self.analyzer = None
+        if self.api_key:
+            try:
+                self.analyzer = YouTubeTrendAnalyzer(self.api_key)
+            except Exception as e:
+                print(f"YouTube Analyzer 초기화 실패: {e}")
+                # 잘못된 API 키는 삭제
+                self.config_manager.clear_api_key()
+                self.api_key = None
         
-        # YouTube Analyzer 초기화
-        try:
-            self.analyzer = YouTubeTrendAnalyzer(self.api_key)
-        except ValueError as e:
-            messagebox.showerror("오류", f"API 키가 올바르지 않습니다.\n{str(e)}")
-            # 잘못된 API 키 삭제
-            self.config_manager.clear_api_key()
-            sys.exit(1)
+        # Gemini Script Generator 초기화 (선택적)
+        self.gemini_generator = None
+        gemini_key = self.config_manager.load_gemini_api_key()
+        if gemini_key:
+            try:
+                self.gemini_generator = GeminiScriptGenerator(gemini_key)
+            except Exception as e:
+                print(f"Gemini 초기화 실패: {e}")
+                # Gemini는 선택적이므로 에러 무시
+
+        self.template_manager = PromptTemplateManager()
 
         # 이미지 캐시
         self.image_cache = {}
@@ -57,16 +64,16 @@ class YouTubeMakerApp:
         """API 키 입력 다이얼로그 표시"""
         dialog = tk.Toplevel(self.root)
         dialog.title("YouTube API 키 설정")
-        dialog.geometry("800x600")
+        dialog.geometry("700x500")  # 너비 700, 높이 500으로 증가
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
         
         # 중앙 배치
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (800 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (600 // 2)
-        dialog.geometry(f"800x600+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)  # 너비에 맞춰 중앙 계산
+        y = (dialog.winfo_screenheight() // 2) - (500 // 2)  # 높이에 맞춰 중앙 계산
+        dialog.geometry(f"700x500+{x}+{y}")
         
         api_key_result = [None]  # 결과 저장용
         
@@ -155,6 +162,113 @@ API 키 발급 방법:
         dialog.wait_window()
         
         return api_key_result[0]
+    
+    def show_gemini_api_key_dialog(self):
+        """Gemini API 키 입력 다이얼로그 표시"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Gemini API 키 설정")
+        dialog.geometry("700x500")  # 너비 700, 높이 500으로 증가
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 중앙 배치
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)  # 너비에 맞춰 중앙 계산
+        y = (dialog.winfo_screenheight() // 2) - (500 // 2)  # 높이에 맞춰 중앙 계산
+        dialog.geometry(f"700x500+{x}+{y}")
+        
+        api_key_result = [None]  # 결과 저장용
+        
+        # 메인 프레임
+        main_frame = ttk.Frame(dialog, padding="30")
+        main_frame.pack(fill=BOTH, expand=YES)
+        
+        # 제목
+        ttk.Label(main_frame,
+                 text="🤖 Gemini API 키 설정",
+                 font=('Helvetica', 16, 'bold'),
+                 bootstyle="success").pack(pady=(0, 10))
+        
+        # 설명
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill=X, pady=(0, 20))
+        
+        desc_text = """대본 생성 기능을 사용하려면 Gemini API 키가 필요합니다.
+
+【Gemini API 키 발급 방법】
+1. Google AI Studio 접속 (aistudio.google.com)
+2. Google 계정으로 로그인
+3. 왼쪽 사이드바에서 "Get API Key" 클릭
+4. "Create API key" 버튼 클릭
+5. 생성된 API 키 복사
+
+【무료 사용 한도】
+• 일일 15-250회 요청 가능 (모델에 따라 다름)
+• 대본 1개당 약 1.3원 비용 (유료 전환 시)
+• 무료로 시작하여 필요시 유료 전환 가능
+
+※ API 키는 안전하게 로컬에 저장됩니다."""
+        
+        ttk.Label(desc_frame,
+                 text=desc_text,
+                 font=('Helvetica', 9),
+                 bootstyle="secondary",
+                 justify=LEFT).pack(anchor=W)
+        
+        # 입력 프레임
+        input_frame = ttk.LabelFrame(main_frame, text="API 키 입력", padding="15")
+        input_frame.pack(fill=X, pady=(0, 20))
+        
+        ttk.Label(input_frame,
+                 text="Gemini API 키:",
+                 font=('Helvetica', 10, 'bold')).pack(anchor=W, pady=(0, 5))
+        
+        api_key_var = tk.StringVar()
+        api_key_entry = ttk.Entry(input_frame,
+                                  textvariable=api_key_var,
+                                  font=('Helvetica', 10),
+                                  width=60)
+        api_key_entry.pack(fill=X)
+        api_key_entry.focus()
+        
+        # 버튼 프레임
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=X, pady=(10, 0))
+        
+        def on_ok():
+            key = api_key_var.get().strip()
+            if not key:
+                messagebox.showwarning("경고", "API 키를 입력해주세요.", parent=dialog)
+                return
+            if len(key) < 20:
+                messagebox.showwarning("경고", "올바른 API 키 형식이 아닙니다.", parent=dialog)
+                return
+            api_key_result[0] = key
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        ttk.Button(button_frame,
+                  text="✅ 확인",
+                  command=on_ok,
+                  bootstyle="success",
+                  width=15).pack(side=RIGHT, padx=(5, 0))
+        
+        ttk.Button(button_frame,
+                  text="❌ 취소",
+                  command=on_cancel,
+                  bootstyle="secondary",
+                  width=15).pack(side=RIGHT)
+        
+        # Enter 키로 확인
+        api_key_entry.bind('<Return>', lambda e: on_ok())
+        
+        # 다이얼로그가 닫힐 때까지 대기
+        dialog.wait_window()
+        
+        return api_key_result[0]
 
     def create_widgets(self):
         # 메인 컨테이너
@@ -201,11 +315,12 @@ API 키 발급 방법:
         
         # 메뉴 아이템들
         menus = [
-            ("📊 유튜브 분석", "youtube_analysis", "primary"),
+            ("🔓 유튜브 분석", "youtube_analysis", "primary"),
+            ("🗂️ 정보 수집", "data_collector", "secondary"),
+            ("📝 대본 생성", "script_generator", "secondary"),
+            ("🎞️ 이미지 생성", "image_maker", "secondary"),
             ("🎨 썸네일 생성", "thumbnail_maker", "secondary"),
-            ("✍️ 제목/설명 생성", "title_generator", "secondary"),
-            ("🎬 영상 제작", "video_maker", "secondary"),
-            ("📈 채널 분석", "channel_analytics", "secondary"),
+            ("🎬 영상 스크립트 생성", "video_script_generator", "secondary"),
             ("⚙️ 설정", "settings", "secondary"),
         ]
         
@@ -229,7 +344,7 @@ API 키 발급 방법:
         info_frame.pack(side=BOTTOM, fill=X, padx=15, pady=10)
         
         ttk.Label(info_frame,
-                 text="v1.0.0",
+                 text="v1.0.1",
                  font=('Helvetica', 8),
                  bootstyle="inverse-secondary").pack(anchor=W)
 
@@ -251,14 +366,16 @@ API 키 발급 방법:
         # 해당 탭 표시
         if tab_key == "youtube_analysis":
             self.show_youtube_analysis()
+        elif tab_key == "data_collector":
+            self.show_coming_soon("정보 수집")
+        elif tab_key == "script_generator":
+            self.show_script_generator()
+        elif tab_key == "image_maker":
+            self.show_coming_soon("이미지 생성")
         elif tab_key == "thumbnail_maker":
             self.show_coming_soon("썸네일 생성")
-        elif tab_key == "title_generator":
-            self.show_coming_soon("제목/설명 생성")
-        elif tab_key == "video_maker":
-            self.show_coming_soon("영상 제작")
-        elif tab_key == "channel_analytics":
-            self.show_coming_soon("채널 분석")
+        elif tab_key == "video_script_generator":
+            self.show_coming_soon("영상 스크립트 생성")
         elif tab_key == "settings":
             self.show_settings()
 
@@ -283,6 +400,471 @@ API 키 발급 방법:
                  font=('Helvetica', 14),
                  bootstyle="secondary").pack()
 
+    def show_script_generator(self):
+        """대본 생성 화면 - 컷 스토리보드 기반"""
+        # Gemini API 키 확인
+        if not self.gemini_generator:
+            self.show_gemini_setup_required()
+            return
+        
+        container = ttk.Frame(self.content_frame, padding="20")
+        container.pack(fill=BOTH, expand=YES)
+        
+        # 헤더
+        header_frame = ttk.Frame(container)
+        header_frame.pack(fill=X, pady=(0, 20))
+        
+        ttk.Label(header_frame,
+                 text="📝 YouTube 대본 생성 (컷 스토리보드)",
+                 font=('Helvetica', 20, 'bold'),
+                 bootstyle="primary").pack(anchor=W)
+        
+        ttk.Label(header_frame,
+                 text="AI가 6-8초 단위의 컷으로 구성된 영상 대본을 생성합니다",
+                 font=('Helvetica', 11),
+                 bootstyle="secondary").pack(anchor=W, pady=(8, 0))
+        
+        # 메인 컨테이너 (3분할: 입력/결과/프롬프트)
+        main_container = ttk.Frame(container)
+        main_container.pack(fill=BOTH, expand=YES)
+        main_container.columnconfigure(0, weight=1)
+        main_container.columnconfigure(1, weight=2)
+        main_container.columnconfigure(2, weight=1)
+        
+        # ===== 왼쪽: 입력 폼 =====
+        input_frame = ttk.LabelFrame(main_container,
+                                     text="📋 대본 설정",
+                                     padding="10",
+                                     bootstyle="info")
+        input_frame.grid(row=0, column=0, sticky=(N, S, W, E), padx=(0, 5))
+        
+        # 주제
+        ttk.Label(input_frame,
+                 text="영상 주제 *",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        topic_entry = ttk.Entry(input_frame, font=('Helvetica', 11), width=35)
+        topic_entry.pack(fill=X, pady=(0, 12))
+        topic_entry.insert(0, "AI 영상 제작의 미래")
+        
+        # 대본 언어
+        ttk.Label(input_frame,
+                 text="대본 언어 *",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        language_var = tk.StringVar(value="한국어")
+        language_frame = ttk.Frame(input_frame)
+        language_frame.pack(fill=X, pady=(0, 12))
+        
+        ttk.Radiobutton(language_frame,
+                       text="한국어",
+                       variable=language_var,
+                       value="한국어",
+                       bootstyle="primary-toolbutton").pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Radiobutton(language_frame,
+                       text="English",
+                       variable=language_var,
+                       value="영어",
+                       bootstyle="primary-toolbutton").pack(side=LEFT)
+        
+        # 포맷
+        ttk.Label(input_frame,
+                 text="포맷 *",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        format_var = tk.StringVar(value="롱폼")
+        format_frame = ttk.Frame(input_frame)
+        format_frame.pack(fill=X, pady=(0, 12))
+        
+        ttk.Radiobutton(format_frame,
+                       text="롱폼",
+                       variable=format_var,
+                       value="롱폼",
+                       bootstyle="success-toolbutton").pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Radiobutton(format_frame,
+                       text="숏폼",
+                       variable=format_var,
+                       value="숏폼",
+                       bootstyle="success-toolbutton").pack(side=LEFT)
+        
+        # 영상 길이
+        ttk.Label(input_frame,
+                 text="영상 길이 (분) *",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        duration_frame = ttk.Frame(input_frame)
+        duration_frame.pack(fill=X, pady=(0, 8))
+        
+        duration_var = tk.IntVar(value=1)
+        duration_spinbox = ttk.Spinbox(duration_frame,
+                                       from_=1,
+                                       to=10,
+                                       textvariable=duration_var,
+                                       font=('Helvetica', 11),
+                                       width=8)
+        duration_spinbox.pack(side=LEFT)
+        ttk.Label(duration_frame,
+                 text="분",
+                 font=('Helvetica', 11)).pack(side=LEFT, padx=(8, 0))
+        
+        # 컷 개수 표시
+        cuts_label = ttk.Label(input_frame,
+                               text="→ 약 10개 컷",
+                               font=('Helvetica', 10),
+                               bootstyle="secondary")
+        cuts_label.pack(anchor=W, pady=(5, 12))
+        
+        def update_cuts_count(*args):
+            cuts = duration_var.get() * 10
+            cuts_label.config(text=f"→ 약 {cuts}개 컷")
+        
+        duration_var.trace('w', update_cuts_count)
+        
+        # 대상 시청자
+        ttk.Label(input_frame,
+                 text="대상 시청자",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        audience_entry = ttk.Entry(input_frame, font=('Helvetica', 11), width=35)
+        audience_entry.pack(fill=X, pady=(0, 12))
+        audience_entry.insert(0, "20-30대")
+        
+        # 템플릿 선택
+        ttk.Label(input_frame,
+                 text="프롬프트 템플릿",
+                 font=('Helvetica', 11, 'bold')).pack(anchor=W, pady=(8, 5))
+        
+        template_var = tk.StringVar(value="default")
+        template_combo = ttk.Combobox(input_frame,
+                                     textvariable=template_var,
+                                     font=('Helvetica', 10),
+                                     width=32,
+                                     state="readonly")
+        template_combo['values'] = self.template_manager.get_template_names()
+        template_combo.pack(fill=X, pady=(0, 15))
+        
+        # 생성 버튼
+        generate_btn = ttk.Button(input_frame,
+                                 text="✨ 대본 생성하기",
+                                 command=lambda: self.generate_script_new(
+                                     topic_entry.get(),
+                                     language_var.get(),
+                                     format_var.get(),
+                                     duration_var.get(),
+                                     audience_entry.get(),
+                                     template_var.get(),
+                                     result_text,
+                                     prompt_text
+                                 ),
+                                 bootstyle="success",
+                                 width=25)
+        generate_btn.pack(pady=(10, 0))
+        
+        # ===== 중앙: 결과 표시 =====
+        result_frame = ttk.LabelFrame(main_container,
+                                      text="📄 생성된 대본",
+                                      padding="10",
+                                      bootstyle="primary")
+        result_frame.grid(row=0, column=1, sticky=(N, S, W, E), padx=(5, 5))
+        
+        # 스크롤 가능한 텍스트 영역 - 줄 간격 추가
+        result_text = scrolledtext.ScrolledText(result_frame,
+                                                font=('Courier', 10),
+                                                wrap=tk.WORD)
+        result_text.pack(fill=BOTH, expand=YES, pady=(0, 10))
+        
+        # 줄 간격 설정: spacing1(줄 위), spacing3(줄 아래)
+        result_text.configure(spacing1=3, spacing2=3, spacing3=3)
+        
+        result_text.insert("1.0", """💡 대본 생성 안내
+
+【컷 스토리보드 형식】
+영상은 6-8초 단위의 컷으로 구성됩니다.
+1분당 약 10개의 컷이 생성됩니다.
+
+【포맷 선택】
+• 롱폼: 자세한 설명, 스토리텔링
+• 숏폼: 빠른 전개, 강렬한 훅
+
+【생성 팁】
+• 구체적인 주제를 입력하세요
+• 원하는 포맷에 맞게 선택하세요
+• 프롬프트 템플릿은 오른쪽에서 편집 가능합니다
+
+왼쪽에서 설정을 입력하고 생성 버튼을 눌러주세요.""")
+        result_text.config(state=tk.DISABLED)
+        
+        # 버튼 프레임
+        button_frame = ttk.Frame(result_frame)
+        button_frame.pack(fill=X)
+        
+        ttk.Button(button_frame,
+                  text="📋 복사",
+                  command=lambda: self.copy_to_clipboard(result_text),
+                  bootstyle="info-outline",
+                  width=15).pack(side=LEFT, padx=(0, 5))
+        
+        ttk.Button(button_frame,
+                  text="💾 저장",
+                  command=lambda: self.save_script(result_text),
+                  bootstyle="success-outline",
+                  width=15).pack(side=LEFT)
+        
+        # ===== 오른쪽: 프롬프트 편집 =====
+        prompt_frame = ttk.LabelFrame(main_container,
+                                      text="🎨 프롬프트 템플릿",
+                                      padding="10",
+                                      bootstyle="warning")
+        prompt_frame.grid(row=0, column=2, sticky=(N, S, W, E), padx=(5, 0))
+        
+        # 프롬프트 텍스트 - 줄 간격 추가
+        prompt_text = scrolledtext.ScrolledText(prompt_frame,
+                                                font=('Courier', 10),
+                                                wrap=tk.WORD)
+        prompt_text.pack(fill=BOTH, expand=YES, pady=(0, 10))
+        
+        # 줄 간격 설정
+        prompt_text.configure(spacing1=3, spacing2=3, spacing3=3)
+        
+        # 기본 템플릿 로드
+        default_template = self.template_manager.get_template("default")
+        prompt_text.insert("1.0", default_template)
+        
+        # 템플릿 변경 시 업데이트
+        def on_template_change(*args):
+            selected = template_var.get()
+            template = self.template_manager.get_template(selected)
+            if template:
+                prompt_text.delete("1.0", tk.END)
+                prompt_text.insert("1.0", template)
+        
+        template_var.trace('w', on_template_change)
+        
+        # 프롬프트 버튼 프레임
+        prompt_button_frame = ttk.Frame(prompt_frame)
+        prompt_button_frame.pack(fill=X)
+        
+        def load_template_file():
+            """템플릿 파일에서 불러오기"""
+            from tkinter import filedialog
+            file_path = filedialog.askopenfilename(
+                title="템플릿 불러오기",
+                filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")]
+            )
+            if file_path:
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        template = f.read()
+                    prompt_text.delete("1.0", tk.END)
+                    prompt_text.insert("1.0", template)
+                    messagebox.showinfo("성공", "템플릿을 불러왔습니다!")
+                except Exception as e:
+                    messagebox.showerror("오류", f"파일 읽기 실패:\n{str(e)}")
+        
+        def save_template_file():
+            """현재 템플릿을 파일로 저장"""
+            from tkinter import filedialog
+            file_path = filedialog.asksaveasfilename(
+                title="템플릿 저장",
+                defaultextension=".txt",
+                filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")]
+            )
+            if file_path:
+                try:
+                    template = prompt_text.get("1.0", tk.END).strip()
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(template)
+                    messagebox.showinfo("성공", f"템플릿이 저장되었습니다:\n{file_path}")
+                except Exception as e:
+                    messagebox.showerror("오류", f"파일 저장 실패:\n{str(e)}")
+        
+        def reset_template():
+            """기본 템플릿으로 리셋"""
+            if messagebox.askyesno("확인", "기본 템플릿으로 되돌리시겠습니까?"):
+                self.template_manager.reset_to_default()
+                template_combo['values'] = self.template_manager.get_template_names()
+                template_var.set("default")
+                on_template_change()
+                messagebox.showinfo("완료", "기본 템플릿으로 리셋되었습니다.")
+        
+        # 3개 버튼 가로 배치
+        ttk.Button(prompt_button_frame,
+                  text="📁 불러오기",
+                  command=load_template_file,
+                  bootstyle="info-outline",
+                  width=10).pack(side=LEFT, padx=(0, 5))
+        
+        ttk.Button(prompt_button_frame,
+                  text="💾 파일저장",
+                  command=save_template_file,
+                  bootstyle="success-outline",
+                  width=10).pack(side=LEFT, padx=(0, 5))
+        
+        ttk.Button(prompt_button_frame,
+                  text="🔄 리셋",
+                  command=reset_template,
+                  bootstyle="secondary-outline",
+                  width=10).pack(side=LEFT)
+        
+    def generate_script_new(self, topic, language, format_type, duration, audience, template_name, result_text, prompt_text):
+        """새로운 대본 생성 실행 (컷 기반)"""
+        if not topic:
+            messagebox.showwarning("경고", "영상 주제를 입력해주세요.")
+            return
+        
+        def run_generation():
+            # 결과 텍스트 초기화
+            result_text.config(state=tk.NORMAL)
+            result_text.delete("1.0", tk.END)
+            result_text.insert("1.0", f"🔄 대본 생성 중...\n\n"
+                                      f"잠시만 기다려주세요...")
+            # spacing 재설정 (확실하게)
+            result_text.configure(spacing1=3, spacing2=3, spacing3=3)
+            result_text.config(state=tk.DISABLED)
+            
+            try:
+                # 사용자 정의 프롬프트 사용
+                custom_prompt = prompt_text.get("1.0", tk.END).strip()
+                
+                # 대본 생성
+                script = self.gemini_generator.generate_script(
+                    topic=topic,
+                    language=language,
+                    format_type=format_type,
+                    duration=duration,
+                    target_audience=audience,
+                    custom_prompt=custom_prompt
+                )
+                
+                # 결과 표시
+                result_text.config(state=tk.NORMAL)
+                result_text.delete("1.0", tk.END)
+                if script:
+                    result_text.insert("1.0", script)
+                else:
+                    result_text.insert("1.0", "❌ 대본 생성에 실패했습니다.\n다시 시도해주세요.")
+                
+                # spacing 재설정 (생성된 텍스트에도 적용)
+                result_text.configure(spacing1=3, spacing2=3, spacing3=3)
+                result_text.config(state=tk.DISABLED)
+                
+            except Exception as e:
+                result_text.config(state=tk.NORMAL)
+                result_text.delete("1.0", tk.END)
+                result_text.insert("1.0", f"❌ 오류 발생:\n\n{str(e)}")
+                # spacing 재설정
+                result_text.configure(spacing1=3, spacing2=3, spacing3=3)
+                result_text.config(state=tk.DISABLED)
+        
+        # 백그라운드에서 실행
+        threading.Thread(target=run_generation, daemon=True).start()
+
+    def show_youtube_setup_required(self):
+        """YouTube API 키 설정 필요 안내"""
+        container = ttk.Frame(self.content_frame)
+        container.pack(fill=BOTH, expand=YES)
+        
+        center_frame = ttk.Frame(container)
+        center_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
+        
+        ttk.Label(center_frame,
+                 text="🔑",
+                 font=('Helvetica', 64)).pack()
+        
+        ttk.Label(center_frame,
+                 text="YouTube API 키가 필요합니다",
+                 font=('Helvetica', 24, 'bold')).pack(pady=(20, 10))
+        
+        ttk.Label(center_frame,
+                 text="YouTube 분석 기능을 사용하려면\nYouTube API 키를 설정해주세요",
+                 font=('Helvetica', 12),
+                 bootstyle="secondary",
+                 justify=CENTER).pack(pady=(0, 20))
+        
+        ttk.Button(center_frame,
+                  text="⚙️ 설정으로 이동",
+                  command=lambda: self.switch_tab("settings"),
+                  bootstyle="primary",
+                  width=20).pack()
+    
+    def generate_script(self, topic, duration, tone, audience, additional, result_text):
+        """대본 생성 실행"""
+        if not topic:
+            messagebox.showwarning("경고", "영상 주제를 입력해주세요.")
+            return
+        
+        def run_generation():
+            # 결과 텍스트 초기화
+            result_text.config(state=tk.NORMAL)
+            result_text.delete("1.0", tk.END)
+            result_text.insert("1.0", "🔄 대본 생성 중...\n\n잠시만 기다려주세요...")
+            result_text.config(state=tk.DISABLED)
+            
+            try:
+                # 대본 생성
+                script = self.gemini_generator.generate_script(
+                    topic=topic,
+                    duration=duration,
+                    tone=tone,
+                    target_audience=audience,
+                    additional_requirements=additional
+                )
+                
+                # 결과 표시
+                result_text.config(state=tk.NORMAL)
+                result_text.delete("1.0", tk.END)
+                if script:
+                    result_text.insert("1.0", script)
+                else:
+                    result_text.insert("1.0", "❌ 대본 생성에 실패했습니다.\n다시 시도해주세요.")
+                result_text.config(state=tk.DISABLED)
+                
+            except Exception as e:
+                result_text.config(state=tk.NORMAL)
+                result_text.delete("1.0", tk.END)
+                result_text.insert("1.0", f"❌ 오류 발생:\n\n{str(e)}\n\n"
+                                         f"API 요청 한도를 초과했을 수 있습니다.\n"
+                                         f"잠시 후 다시 시도해주세요.")
+                result_text.config(state=tk.DISABLED)
+        
+        # 백그라운드에서 실행
+        threading.Thread(target=run_generation, daemon=True).start()
+    
+    def copy_to_clipboard(self, text_widget):
+        """클립보드에 복사"""
+        text = text_widget.get("1.0", tk.END).strip()
+        if text and not text.startswith("대본 설정을"):
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+            messagebox.showinfo("완료", "클립보드에 복사되었습니다!")
+        else:
+            messagebox.showwarning("경고", "복사할 내용이 없습니다.")
+    
+    def save_script(self, text_widget):
+        """대본 파일로 저장"""
+        from tkinter import filedialog
+        text = text_widget.get("1.0", tk.END).strip()
+        
+        if not text or text.startswith("대본 설정을"):
+            messagebox.showwarning("경고", "저장할 내용이 없습니다.")
+            return
+        
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(text)
+                messagebox.showinfo("완료", f"대본이 저장되었습니다:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"저장 실패:\n{str(e)}")
+
+
     def show_settings(self):
         """설정 화면"""
         container = ttk.Frame(self.content_frame, padding="20")
@@ -302,15 +884,15 @@ API 키 발급 방법:
                  font=('Helvetica', 10),
                  bootstyle="secondary").pack(anchor=W, pady=(5, 0))
         
-        # API 키 설정 섹션
-        api_section = ttk.LabelFrame(container, 
-                                     text="🔑 API 키 관리",
+        # YouTube API 키 설정 섹션
+        youtube_api_section = ttk.LabelFrame(container, 
+                                     text="🔑 YouTube API 키 관리",
                                      padding="20",
                                      bootstyle="primary")
-        api_section.pack(fill=X, pady=(0, 20))
+        youtube_api_section.pack(fill=X, pady=(0, 20))
         
-        # 현재 API 키 상태
-        status_frame = ttk.Frame(api_section)
+        # 현재 YouTube API 키 상태
+        status_frame = ttk.Frame(youtube_api_section)
         status_frame.pack(fill=X, pady=(0, 15))
         
         ttk.Label(status_frame,
@@ -331,7 +913,7 @@ API 키 발급 방법:
                  bootstyle=status_style).grid(row=0, column=1, sticky=W, padx=(10, 0), pady=5)
         
         # 버튼들
-        button_frame = ttk.Frame(api_section)
+        button_frame = ttk.Frame(youtube_api_section)
         button_frame.pack(fill=X)
         
         def change_api_key():
@@ -350,6 +932,10 @@ API 키 발급 방법:
         
         def test_api_key():
             """API 키 테스트"""
+            if not self.analyzer:
+                messagebox.showwarning("경고", "YouTube API 키가 설정되지 않았습니다.")
+                return
+            
             try:
                 # 간단한 API 호출로 테스트
                 test_result = self.analyzer.youtube.videos().list(
@@ -369,10 +955,12 @@ API 키 발급 방법:
         def delete_api_key():
             """API 키 삭제"""
             if messagebox.askyesno("확인", 
-                                  "저장된 API 키를 삭제하시겠습니까?\n다음 실행 시 다시 입력해야 합니다.",
+                                  "저장된 YouTube API 키를 삭제하시겠습니까?\nYouTube 분석 기능을 사용할 수 없습니다.",
                                   parent=container):
                 self.config_manager.clear_api_key()
-                messagebox.showinfo("완료", "API 키가 삭제되었습니다.")
+                self.api_key = None
+                self.analyzer = None
+                messagebox.showinfo("완료", "YouTube API 키가 삭제되었습니다.")
                 self.show_settings()  # 화면 새로고침
         
         ttk.Button(button_frame,
@@ -393,6 +981,97 @@ API 키 발급 방법:
                   bootstyle="danger",
                   width=20).pack(side=LEFT)
         
+        # Gemini API 키 설정 섹션
+        gemini_api_section = ttk.LabelFrame(container,
+                                            text="🤖 Gemini API 키 관리 (대본 생성용)",
+                                            padding="20",
+                                            bootstyle="success")
+        gemini_api_section.pack(fill=X, pady=(0, 20))
+        
+        # Gemini API 키 상태
+        gemini_status_frame = ttk.Frame(gemini_api_section)
+        gemini_status_frame.pack(fill=X, pady=(0, 15))
+        
+        ttk.Label(gemini_status_frame,
+                 text="현재 상태:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=W, pady=5)
+        
+        gemini_key = self.config_manager.load_gemini_api_key()
+        if gemini_key:
+            masked_gemini_key = gemini_key[:8] + "..." + gemini_key[-4:]
+            gemini_status_text = f"✅ 설정됨 ({masked_gemini_key})"
+            gemini_status_style = "success"
+        else:
+            gemini_status_text = "❌ 설정되지 않음 (대본 생성 불가)"
+            gemini_status_style = "danger"
+        
+        ttk.Label(gemini_status_frame,
+                 text=gemini_status_text,
+                 font=('Helvetica', 10),
+                 bootstyle=gemini_status_style).grid(row=0, column=1, sticky=W, padx=(10, 0), pady=5)
+        
+        # Gemini 버튼들
+        gemini_button_frame = ttk.Frame(gemini_api_section)
+        gemini_button_frame.pack(fill=X)
+        
+        def change_gemini_key():
+            """Gemini API 키 변경"""
+            new_key = self.show_gemini_api_key_dialog()
+            if new_key:
+                try:
+                    # 새 Gemini API 키로 generator 재초기화
+                    self.gemini_generator = GeminiScriptGenerator(new_key)
+                    self.config_manager.save_gemini_api_key(new_key)
+                    messagebox.showinfo("성공", "Gemini API 키가 성공적으로 변경되었습니다.")
+                    self.show_settings()  # 화면 새로고침
+                except Exception as e:
+                    messagebox.showerror("오류", f"올바르지 않은 Gemini API 키입니다.\n{str(e)}")
+        
+        def test_gemini_key():
+            """Gemini API 키 테스트"""
+            if not self.gemini_generator:
+                messagebox.showwarning("경고", "Gemini API 키가 설정되지 않았습니다.")
+                return
+            
+            try:
+                # 간단한 생성 테스트
+                response = self.gemini_generator.model.generate_content("Hello")
+                if response:
+                    messagebox.showinfo("성공", "✅ Gemini API 키가 정상적으로 작동합니다!")
+                else:
+                    messagebox.showwarning("경고", "응답을 받지 못했습니다.")
+            except Exception as e:
+                error_msg = str(e)
+                messagebox.showerror("오류", f"❌ Gemini API 키 테스트 실패\n\n{error_msg}")
+        
+        def delete_gemini_key():
+            """Gemini API 키 삭제"""
+            if messagebox.askyesno("확인",
+                                  "저장된 Gemini API 키를 삭제하시겠습니까?\n대본 생성 기능을 사용할 수 없습니다.",
+                                  parent=container):
+                self.config_manager.clear_gemini_api_key()
+                self.gemini_generator = None
+                messagebox.showinfo("완료", "Gemini API 키가 삭제되었습니다.")
+                self.show_settings()  # 화면 새로고침
+        
+        ttk.Button(gemini_button_frame,
+                  text="🔄 Gemini 키 변경",
+                  command=change_gemini_key,
+                  bootstyle="success",
+                  width=20).pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Button(gemini_button_frame,
+                  text="🧪 연결 테스트",
+                  command=test_gemini_key,
+                  bootstyle="info",
+                  width=20).pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Button(gemini_button_frame,
+                  text="🗑️ Gemini 키 삭제",
+                  command=delete_gemini_key,
+                  bootstyle="danger",
+                  width=20).pack(side=LEFT)
+        
         # 도움말 섹션
         help_section = ttk.LabelFrame(container,
                                      text="💡 도움말",
@@ -400,16 +1079,22 @@ API 키 발급 방법:
                                      bootstyle="info")
         help_section.pack(fill=X, pady=(0, 20))
         
-        help_text = """API 키 발급 방법:
-
+        help_text = """【YouTube API 키 발급】
 1. Google Cloud Console (console.cloud.google.com) 접속
 2. 새 프로젝트 생성 또는 기존 프로젝트 선택
 3. "API 및 서비스" → "라이브러리" 클릭
 4. "YouTube Data API v3" 검색 및 활성화
 5. "사용자 인증 정보" → "사용자 인증 정보 만들기" → "API 키" 선택
-6. 생성된 API 키를 복사하여 위의 "API 키 변경" 버튼으로 입력
+6. 생성된 API 키를 복사하여 위의 "YouTube 키 변경" 버튼으로 입력
 
-※ API 키는 암호화되어 로컬에만 저장됩니다.
+【Gemini API 키 발급】
+1. Google AI Studio (aistudio.google.com) 접속
+2. Google 계정으로 로그인
+3. 왼쪽 사이드바에서 "Get API Key" 클릭
+4. "Create API key" 버튼 클릭
+5. 생성된 API 키를 복사하여 위의 "Gemini 키 변경" 버튼으로 입력
+
+※ 모든 API 키는 암호화되어 로컬에만 저장됩니다.
 ※ 저장 위치: {}""".format(self.config_manager.config_file)
         
         ttk.Label(help_section,
@@ -418,32 +1103,13 @@ API 키 발급 방법:
                  bootstyle="secondary",
                  justify=LEFT).pack(anchor=W)
         
-        # 정보 섹션
-        info_section = ttk.LabelFrame(container,
-                                     text="ℹ️ 애플리케이션 정보",
-                                     padding="20",
-                                     bootstyle="secondary")
-        info_section.pack(fill=X)
-        
-        info_frame = ttk.Frame(info_section)
-        info_frame.pack(fill=X)
-        
-        info_data = [
-            ("버전", "1.0.0"),
-            ("개발", "YouTube Maker Team"),
-            ("설정 파일", str(self.config_manager.config_file)),
-        ]
-        
-        for i, (label, value) in enumerate(info_data):
-            ttk.Label(info_frame,
-                     text=f"{label}:",
-                     font=('Helvetica', 9, 'bold')).grid(row=i, column=0, sticky=W, pady=3)
-            ttk.Label(info_frame,
-                     text=value,
-                     font=('Helvetica', 9)).grid(row=i, column=1, sticky=W, padx=(10, 0), pady=3)
-
     def show_youtube_analysis(self):
         """유튜브 분석 탭"""
+        # YouTube API 키 확인
+        if not self.analyzer:
+            self.show_youtube_setup_required()
+            return
+        
         # 메인 컨테이너
         analysis_container = ttk.Frame(self.content_frame)
         analysis_container.pack(fill=BOTH, expand=YES)
@@ -729,7 +1395,7 @@ API 키 발급 방법:
             
             # 로딩
             loading = ttk.Label(self.result_frame,
-                              text="🔄 검색 중...",
+                              text="검색 중...",
                               font=('Helvetica', 14),
                               bootstyle="info")
             loading.pack(pady=50)
@@ -785,11 +1451,7 @@ API 키 발급 방법:
                 else:
                     no_result = ttk.Frame(self.result_frame)
                     no_result.grid(row=1, column=0, pady=50)
-                    
-                    ttk.Label(no_result,
-                             text="😕",
-                             font=('Helvetica', 24)).pack()
-                    
+                                        
                     ttk.Label(no_result,
                              text="검색 결과가 없습니다",
                              font=('Helvetica', 14)).pack(pady=10)
