@@ -6,6 +6,7 @@ from ttkbootstrap.constants import *
 from ttkbootstrap.scrolled import ScrolledFrame
 from youtube_analyzer import YouTubeTrendAnalyzer
 from gemini_script_generator import GeminiScriptGenerator
+from gemini_image_generator import GeminiImageGenerator
 from config_manager import ConfigManager
 from prompt_template_manager import PromptTemplateManager
 from PIL import Image, ImageTk
@@ -41,15 +42,20 @@ class YouTubeMakerApp:
         
         # Gemini Script Generator 초기화 (선택적)
         self.gemini_generator = None
+        self.gemini_image_generator = None
         gemini_key = self.config_manager.load_gemini_api_key()
         if gemini_key:
             try:
                 self.gemini_generator = GeminiScriptGenerator(gemini_key)
+                self.gemini_image_generator = GeminiImageGenerator(gemini_key)
             except Exception as e:
                 print(f"Gemini 초기화 실패: {e}")
                 # Gemini는 선택적이므로 에러 무시
 
         self.template_manager = PromptTemplateManager()
+
+        # 이미지 생성 관련 상태
+        self.image_cuts_data = []  # 컷별 이미지 데이터 저장
 
         # 이미지 캐시
         self.image_cache = {}
@@ -366,7 +372,7 @@ API 키 발급 방법:
         elif tab_key == "script_generator":
             self.show_script_generator()
         elif tab_key == "image_maker":
-            self.show_coming_soon("이미지 생성")
+            self.show_image_maker()
         elif tab_key == "thumbnail_maker":
             self.show_coming_soon("썸네일 생성")
         elif tab_key == "video_script_generator":
@@ -783,7 +789,595 @@ API 키 발급 방법:
                   command=lambda: self.switch_tab("settings"),
                   bootstyle="primary",
                   width=20).pack()
-    
+
+    def show_gemini_setup_required(self):
+        """Gemini API 키 설정 필요 안내"""
+        container = ttk.Frame(self.content_frame)
+        container.pack(fill=BOTH, expand=YES)
+
+        center_frame = ttk.Frame(container)
+        center_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
+
+        ttk.Label(center_frame,
+                 text="🤖",
+                 font=('Helvetica', 64)).pack()
+
+        ttk.Label(center_frame,
+                 text="Gemini API 키가 필요합니다",
+                 font=('Helvetica', 24, 'bold')).pack(pady=(20, 10))
+
+        ttk.Label(center_frame,
+                 text="이 기능을 사용하려면\nGemini API 키를 설정해주세요",
+                 font=('Helvetica', 12),
+                 bootstyle="secondary",
+                 justify=CENTER).pack(pady=(0, 20))
+
+        ttk.Button(center_frame,
+                  text="⚙️ 설정으로 이동",
+                  command=lambda: self.switch_tab("settings"),
+                  bootstyle="success",
+                  width=20).pack()
+
+    def show_image_maker(self):
+        """이미지 생성 화면"""
+        # Gemini API 키 확인
+        if not self.gemini_image_generator:
+            self.show_gemini_setup_required()
+            return
+
+        # 메인 컨테이너
+        container = ttk.Frame(self.content_frame, padding="15")
+        container.pack(fill=BOTH, expand=YES)
+
+        # 헤더
+        header_frame = ttk.Frame(container)
+        header_frame.pack(fill=X, pady=(0, 15))
+
+        ttk.Label(header_frame,
+                 text="🎞️ 컷별 이미지 생성",
+                 font=('Helvetica', 18, 'bold'),
+                 bootstyle="primary").pack(anchor=W)
+
+        ttk.Label(header_frame,
+                 text="대본을 입력하면 각 컷에 맞는 이미지를 AI가 자동 생성합니다",
+                 font=('Helvetica', 10),
+                 bootstyle="secondary").pack(anchor=W, pady=(5, 0))
+
+        # 스크롤 가능한 메인 컨테이너
+        main_scroll = ScrolledFrame(container, autohide=True)
+        main_scroll.pack(fill=BOTH, expand=YES)
+
+        # ========== 기능 1: 설정 영역 ==========
+        settings_frame = ttk.LabelFrame(main_scroll,
+                                       text="⚙️ 이미지 생성 설정",
+                                       padding="15",
+                                       bootstyle="primary")
+        settings_frame.pack(fill=X, pady=(0, 15))
+
+        # 설정 그리드
+        settings_grid = ttk.Frame(settings_frame)
+        settings_grid.pack(fill=X)
+        settings_grid.columnconfigure(1, weight=1)
+        settings_grid.columnconfigure(3, weight=1)
+        settings_grid.columnconfigure(5, weight=1)
+
+        # 모델 선택
+        ttk.Label(settings_grid,
+                 text="모델:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.image_model_var = tk.StringVar(value="gemini-2.5-flash-image")
+        model_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.image_model_var,
+                                   values=["gemini-2.5-flash-image", "gemini-3-pro-image-preview"],
+                                   state="readonly",
+                                   width=35)
+        model_combo.grid(row=0, column=1, sticky=W, padx=(0, 20), pady=5)
+
+        # 스타일 타입 (애니메이션/실사)
+        ttk.Label(settings_grid,
+                 text="스타일:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=2, sticky=W, padx=(0, 10), pady=5)
+
+        self.style_type_var = tk.StringVar(value="애니메이션")
+        style_frame = ttk.Frame(settings_grid)
+        style_frame.grid(row=0, column=3, sticky=W, padx=(0, 10), pady=5)
+
+        ttk.Radiobutton(style_frame,
+                       text="애니메이션",
+                       variable=self.style_type_var,
+                       value="애니메이션",
+                       bootstyle="info-toolbutton").pack(side=LEFT, padx=(0, 5))
+
+        ttk.Radiobutton(style_frame,
+                       text="실사",
+                       variable=self.style_type_var,
+                       value="실사",
+                       bootstyle="info-toolbutton").pack(side=LEFT)
+
+        # 이미지 비율 선택
+        ttk.Label(settings_grid,
+                 text="비율:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=4, sticky=W, padx=(10, 10), pady=5)
+
+        self.aspect_ratio_var = tk.StringVar(value="16:9")
+        ratio_frame = ttk.Frame(settings_grid)
+        ratio_frame.grid(row=0, column=5, sticky=W, pady=5)
+
+        ttk.Radiobutton(ratio_frame,
+                       text="롱폼 (16:9)",
+                       variable=self.aspect_ratio_var,
+                       value="16:9",
+                       bootstyle="warning-toolbutton").pack(side=LEFT, padx=(0, 5))
+
+        ttk.Radiobutton(ratio_frame,
+                       text="숏폼 (9:16)",
+                       variable=self.aspect_ratio_var,
+                       value="9:16",
+                       bootstyle="warning-toolbutton").pack(side=LEFT)
+
+        # 두 번째 줄: 추가 설정
+        ttk.Label(settings_grid,
+                 text="추가 스타일 (영어):",
+                 font=('Helvetica', 10)).grid(row=1, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.style_input_var = tk.StringVar()
+        ttk.Entry(settings_grid,
+                 textvariable=self.style_input_var,
+                 font=('Helvetica', 10),
+                 width=25).grid(row=1, column=1, sticky=W, padx=(0, 20), pady=5)
+
+        ttk.Label(settings_grid,
+                 text="카메라 (영어):",
+                 font=('Helvetica', 10)).grid(row=1, column=2, sticky=W, padx=(0, 10), pady=5)
+
+        self.camera_input_var = tk.StringVar()
+        ttk.Entry(settings_grid,
+                 textvariable=self.camera_input_var,
+                 font=('Helvetica', 10),
+                 width=25).grid(row=1, column=3, sticky=W, padx=(0, 20), pady=5)
+
+        ttk.Label(settings_grid,
+                 text="분위기 (영어):",
+                 font=('Helvetica', 10)).grid(row=1, column=4, sticky=W, padx=(0, 10), pady=5)
+
+        self.mood_input_var = tk.StringVar()
+        ttk.Entry(settings_grid,
+                 textvariable=self.mood_input_var,
+                 font=('Helvetica', 10),
+                 width=25).grid(row=1, column=5, sticky=W, pady=5)
+
+        # 힌트 레이블
+        hint_frame = ttk.Frame(settings_frame)
+        hint_frame.pack(fill=X, pady=(10, 0))
+
+        ttk.Label(hint_frame,
+                 text="💡 추가 설정은 선택사항입니다. 예) Style: cyberpunk, neon | Camera: close-up shot | Mood: dramatic, cinematic",
+                 font=('Helvetica', 9),
+                 bootstyle="secondary").pack(anchor=W)
+
+        # ========== 기능 2: 대본 입력 영역 ==========
+        script_frame = ttk.LabelFrame(main_scroll,
+                                     text="📝 대본 입력 (복사/붙여넣기)",
+                                     padding="15",
+                                     bootstyle="info")
+        script_frame.pack(fill=X, pady=(0, 15))
+
+        # 대본 텍스트 입력
+        self.image_script_text = scrolledtext.ScrolledText(script_frame,
+                                                           font=('Courier', 10),
+                                                           wrap=tk.WORD,
+                                                           height=12)
+        self.image_script_text.pack(fill=X, pady=(0, 10))
+        self.image_script_text.configure(spacing1=2, spacing2=2, spacing3=2)
+
+        # 안내 텍스트
+        self.image_script_text.insert("1.0", """대본 생성 탭에서 생성된 대본을 여기에 붙여넣기 하세요.
+
+형식 예시:
+=== CUT 1 (0:00-0:08) ===
+[장면 설명]
+도시의 야경이 펼쳐진 빌딩 옥상, 주인공이 서있다
+
+[대사/내레이션]
+오늘 여러분께 놀라운 이야기를 들려드리겠습니다
+
+[음악/효과음]
+긴장감 있는 배경음악
+---
+
+위와 같은 컷 형식의 대본을 입력하시면 자동으로 파싱됩니다.""")
+
+        # 버튼 프레임
+        button_frame = ttk.Frame(script_frame)
+        button_frame.pack(fill=X)
+
+        ttk.Button(button_frame,
+                  text="📂 파일 불러오기",
+                  command=self.load_script_file,
+                  bootstyle="info-outline",
+                  width=15).pack(side=LEFT, padx=(0, 10))
+
+        self.generate_images_btn = ttk.Button(button_frame,
+                                              text="✨ 프롬프트/이미지 생성",
+                                              command=self.start_image_generation,
+                                              bootstyle="success",
+                                              width=25)
+        self.generate_images_btn.pack(side=LEFT, padx=(0, 10))
+
+        ttk.Button(button_frame,
+                  text="🗑️ 초기화",
+                  command=self.clear_image_generation,
+                  bootstyle="danger-outline",
+                  width=15).pack(side=LEFT)
+
+        # 진행 상태
+        self.image_progress_var = tk.StringVar(value="")
+        self.image_progress_label = ttk.Label(button_frame,
+                                              textvariable=self.image_progress_var,
+                                              font=('Helvetica', 10),
+                                              bootstyle="info")
+        self.image_progress_label.pack(side=LEFT, padx=(20, 0))
+
+        # ========== 기능 3: 결과 표시 영역 ==========
+        results_frame = ttk.LabelFrame(main_scroll,
+                                      text="🖼️ 생성 결과 (컷별 이미지)",
+                                      padding="15",
+                                      bootstyle="success")
+        results_frame.pack(fill=BOTH, expand=YES, pady=(0, 10))
+
+        # 전체 저장 버튼
+        save_all_frame = ttk.Frame(results_frame)
+        save_all_frame.pack(fill=X, pady=(0, 10))
+
+        ttk.Button(save_all_frame,
+                  text="💾 전체 이미지 저장",
+                  command=self.save_all_images,
+                  bootstyle="success",
+                  width=20).pack(side=LEFT)
+
+        ttk.Label(save_all_frame,
+                 text="생성된 모든 이미지를 한 번에 저장합니다",
+                 font=('Helvetica', 9),
+                 bootstyle="secondary").pack(side=LEFT, padx=(10, 0))
+
+        # 결과 컨테이너 (스크롤 가능)
+        self.image_results_container = ttk.Frame(results_frame)
+        self.image_results_container.pack(fill=BOTH, expand=YES)
+
+        # 초기 메시지
+        self.image_initial_message = ttk.Label(self.image_results_container,
+                                               text="대본을 입력하고 '프롬프트/이미지 생성' 버튼을 클릭하세요.\n생성된 이미지가 여기에 컷별로 표시됩니다.",
+                                               font=('Helvetica', 11),
+                                               bootstyle="secondary",
+                                               justify=CENTER)
+        self.image_initial_message.pack(pady=50)
+
+    def start_image_generation(self):
+        """이미지 생성 프로세스 시작"""
+        script = self.image_script_text.get("1.0", tk.END).strip()
+
+        if not script or script.startswith("대본 생성 탭에서"):
+            messagebox.showwarning("경고", "대본을 입력해주세요.")
+            return
+
+        # 대본 파싱
+        cuts = self.gemini_image_generator.parse_script_to_cuts(script)
+
+        if not cuts:
+            messagebox.showwarning("경고", "컷을 파싱할 수 없습니다.\n올바른 형식의 대본을 입력해주세요.")
+            return
+
+        # 버튼 비활성화
+        self.generate_images_btn.config(state=tk.DISABLED)
+        self.image_progress_var.set(f"총 {len(cuts)}개 컷 처리 중...")
+
+        def run_generation():
+            try:
+                # 1단계: 프롬프트 생성
+                self.image_progress_var.set("프롬프트 생성 중...")
+
+                cuts_with_prompts = self.gemini_image_generator.generate_image_prompts(
+                    cuts=cuts,
+                    style_type=self.style_type_var.get(),
+                    style_input=self.style_input_var.get(),
+                    camera_input=self.camera_input_var.get(),
+                    mood_input=self.mood_input_var.get()
+                )
+
+                # 2단계: 이미지 생성
+                def update_progress(current, total, message):
+                    self.image_progress_var.set(f"{message} ({current}/{total})")
+
+                results = self.gemini_image_generator.generate_all_images(
+                    cuts_with_prompts=cuts_with_prompts,
+                    model=self.image_model_var.get(),
+                    aspect_ratio=self.aspect_ratio_var.get(),
+                    progress_callback=update_progress
+                )
+
+                # UI 업데이트
+                self.root.after(0, lambda: self.display_image_results(results))
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("오류", f"이미지 생성 실패:\n{str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.generate_images_btn.config(state=tk.NORMAL))
+                self.root.after(0, lambda: self.image_progress_var.set(""))
+
+        threading.Thread(target=run_generation, daemon=True).start()
+
+    def display_image_results(self, results):
+        """이미지 생성 결과 표시"""
+        # 기존 내용 삭제
+        for widget in self.image_results_container.winfo_children():
+            widget.destroy()
+
+        self.image_cuts_data = results
+
+        if not results:
+            ttk.Label(self.image_results_container,
+                     text="생성된 결과가 없습니다.",
+                     font=('Helvetica', 11),
+                     bootstyle="warning").pack(pady=50)
+            return
+
+        # 각 컷별 결과 표시
+        for i, cut in enumerate(results):
+            self.create_cut_result_card(self.image_results_container, cut, i)
+
+    def create_cut_result_card(self, parent, cut, index):
+        """개별 컷 결과 카드 생성"""
+        # 카드 프레임
+        card = ttk.LabelFrame(parent,
+                             text=f"CUT {cut['cut_number']} ({cut['time_range']})",
+                             padding="10",
+                             bootstyle="info")
+        card.pack(fill=X, pady=(0, 15))
+
+        # 3분할 레이아웃: 대본 | 프롬프트 | 이미지
+        content_frame = ttk.Frame(card)
+        content_frame.pack(fill=X)
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(1, weight=1)
+        content_frame.columnconfigure(2, weight=0)
+
+        # 왼쪽: 대본 정보
+        script_frame = ttk.Frame(content_frame)
+        script_frame.grid(row=0, column=0, sticky=(N, S, W, E), padx=(0, 10))
+
+        ttk.Label(script_frame,
+                 text="📝 대본",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="primary").pack(anchor=W)
+
+        script_text = scrolledtext.ScrolledText(script_frame,
+                                                font=('Helvetica', 10),
+                                                wrap=tk.WORD,
+                                                height=12,
+                                                width=35)
+        script_text.pack(fill=X, pady=(5, 0))
+        script_text.insert("1.0", f"[장면]\n{cut['scene_description']}\n\n[대사]\n{cut['narration']}")
+        script_text.config(state=tk.DISABLED)
+        script_text.configure(spacing1=3, spacing2=3, spacing3=3)
+
+        # 중앙: 프롬프트 (편집 가능)
+        prompt_frame = ttk.Frame(content_frame)
+        prompt_frame.grid(row=0, column=1, sticky=(N, S, W, E), padx=(0, 10))
+
+        ttk.Label(prompt_frame,
+                 text="🎨 이미지 프롬프트 (편집 가능)",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="success").pack(anchor=W)
+
+        prompt_text = scrolledtext.ScrolledText(prompt_frame,
+                                                font=('Helvetica', 10),
+                                                wrap=tk.WORD,
+                                                height=12,
+                                                width=40)
+        prompt_text.pack(fill=X, pady=(5, 5))
+        prompt_text.configure(spacing1=3, spacing2=3, spacing3=3)
+        prompt_text.insert("1.0", cut.get('image_prompt', '프롬프트 생성 실패'))
+
+        # 재생성 버튼
+        regen_btn = ttk.Button(prompt_frame,
+                              text="🔄 이미지 재생성",
+                              command=lambda idx=index, pt=prompt_text: self.regenerate_single_image(idx, pt),
+                              bootstyle="warning-outline",
+                              width=18)
+        regen_btn.pack(anchor=W)
+
+        # 오른쪽: 이미지
+        image_frame = ttk.Frame(content_frame)
+        image_frame.grid(row=0, column=2, sticky=(N, S, W, E))
+
+        ttk.Label(image_frame,
+                 text="🖼️ 생성 이미지",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="info").pack(anchor=W)
+
+        # 이미지 표시 영역
+        image_display = ttk.Label(image_frame, text="")
+        image_display.pack(pady=(5, 5))
+
+        if cut.get('generated_image'):
+            # PIL Image를 PhotoImage로 변환
+            img = cut['generated_image']
+            # 썸네일 크기로 리사이즈
+            img_display = img.copy()
+            img_display.thumbnail((256, 256), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(img_display)
+            image_display.config(image=photo)
+            image_display.image = photo  # 참조 유지
+
+            # 이미지 인덱스 저장 (저장시 사용)
+            image_display.cut_index = index
+        elif cut.get('image_error'):
+            image_display.config(text=f"❌ {cut['image_error'][:50]}...",
+                               font=('Helvetica', 9),
+                               bootstyle="danger")
+        else:
+            image_display.config(text="이미지 없음",
+                               font=('Helvetica', 10),
+                               bootstyle="secondary")
+
+        # 개별 저장 버튼
+        ttk.Button(image_frame,
+                  text="💾 저장",
+                  command=lambda idx=index: self.save_single_image(idx),
+                  bootstyle="success-outline",
+                  width=10).pack(anchor=W)
+
+    def regenerate_single_image(self, cut_index, prompt_text_widget):
+        """단일 컷 이미지 재생성"""
+        new_prompt = prompt_text_widget.get("1.0", tk.END).strip()
+
+        if not new_prompt:
+            messagebox.showwarning("경고", "프롬프트를 입력해주세요.")
+            return
+
+        self.image_progress_var.set(f"컷 {cut_index + 1} 이미지 재생성 중...")
+
+        def run_regeneration():
+            try:
+                cut = self.image_cuts_data[cut_index]
+                updated_cut = self.gemini_image_generator.regenerate_cut_image(
+                    cut=cut,
+                    new_prompt=new_prompt,
+                    model=self.image_model_var.get(),
+                    aspect_ratio=self.aspect_ratio_var.get()
+                )
+
+                self.image_cuts_data[cut_index] = updated_cut
+
+                # UI 업데이트
+                self.root.after(0, lambda: self.display_image_results(self.image_cuts_data))
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("오류", f"재생성 실패:\n{str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.image_progress_var.set(""))
+
+        threading.Thread(target=run_regeneration, daemon=True).start()
+
+    def save_single_image(self, cut_index):
+        """단일 이미지 저장"""
+        from tkinter import filedialog
+
+        if cut_index >= len(self.image_cuts_data):
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        cut = self.image_cuts_data[cut_index]
+        if not cut.get('generated_image'):
+            messagebox.showwarning("경고", "이 컷에는 생성된 이미지가 없습니다.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG 파일", "*.png"), ("JPEG 파일", "*.jpg"), ("모든 파일", "*.*")],
+            initialfile=f"cut_{cut['cut_number']}.png"
+        )
+
+        if file_path:
+            try:
+                cut['generated_image'].save(file_path)
+                messagebox.showinfo("완료", f"이미지가 저장되었습니다:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"저장 실패:\n{str(e)}")
+
+    def save_all_images(self):
+        """모든 이미지 일괄 저장"""
+        from tkinter import filedialog
+
+        if not self.image_cuts_data:
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        # 저장할 이미지가 있는지 확인
+        images_to_save = [cut for cut in self.image_cuts_data if cut.get('generated_image')]
+
+        if not images_to_save:
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        # 폴더 선택
+        folder_path = filedialog.askdirectory(title="이미지 저장 폴더 선택")
+
+        if folder_path:
+            try:
+                import os
+                saved_count = 0
+
+                for cut in images_to_save:
+                    file_path = os.path.join(folder_path, f"cut_{cut['cut_number']:02d}.png")
+                    cut['generated_image'].save(file_path)
+                    saved_count += 1
+
+                messagebox.showinfo("완료", f"{saved_count}개 이미지가 저장되었습니다:\n{folder_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"저장 실패:\n{str(e)}")
+
+    def load_script_file(self):
+        """대본 텍스트 파일 불러오기"""
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(
+            title="대본 파일 선택",
+            filetypes=[
+                ("텍스트 파일", "*.txt"),
+                ("모든 파일", "*.*")
+            ]
+        )
+
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    script_content = f.read()
+
+                # 기존 내용 지우고 새 내용 삽입
+                self.image_script_text.delete("1.0", tk.END)
+                self.image_script_text.insert("1.0", script_content)
+
+                messagebox.showinfo("완료", f"파일을 불러왔습니다:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"파일을 불러오는데 실패했습니다:\n{str(e)}")
+
+    def clear_image_generation(self):
+        """이미지 생성 초기화"""
+        # 텍스트 초기화
+        self.image_script_text.delete("1.0", tk.END)
+        self.image_script_text.insert("1.0", """대본 생성 탭에서 생성된 대본을 여기에 붙여넣기 하세요.
+
+형식 예시:
+=== CUT 1 (0:00-0:08) ===
+[장면 설명]
+도시의 야경이 펼쳐진 빌딩 옥상, 주인공이 서있다
+
+[대사/내레이션]
+오늘 여러분께 놀라운 이야기를 들려드리겠습니다
+
+[음악/효과음]
+긴장감 있는 배경음악
+---
+
+위와 같은 컷 형식의 대본을 입력하시면 자동으로 파싱됩니다.""")
+
+        # 결과 영역 초기화
+        for widget in self.image_results_container.winfo_children():
+            widget.destroy()
+
+        self.image_initial_message = ttk.Label(self.image_results_container,
+                                               text="대본을 입력하고 '프롬프트/이미지 생성' 버튼을 클릭하세요.\n생성된 이미지가 여기에 컷별로 표시됩니다.",
+                                               font=('Helvetica', 11),
+                                               bootstyle="secondary",
+                                               justify=CENTER)
+        self.image_initial_message.pack(pady=50)
+
+        # 데이터 초기화
+        self.image_cuts_data = []
+        self.image_progress_var.set("")
+
     def generate_script(self, topic, duration, tone, audience, additional, result_text):
         """대본 생성 실행"""
         if not topic:
