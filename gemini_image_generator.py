@@ -104,10 +104,11 @@ class GeminiImageGenerator:
     def generate_image_prompts(
         self,
         cuts: List[Dict],
-        style_type: str = "애니메이션",
-        style_input: str = "",
-        camera_input: str = "",
-        mood_input: str = "",
+        style: str = "Animation",
+        mood: str = "Cinematic",
+        color: str = "Vibrant & Colorful",
+        lighting: str = "Natural Sunlight",
+        camera: str = "Wide Angle",
         max_retries: int = 3
     ) -> List[Dict]:
         """
@@ -115,10 +116,11 @@ class GeminiImageGenerator:
 
         Args:
             cuts: 파싱된 컷 리스트
-            style_type: 애니메이션/실사
-            style_input: 추가 스타일 (영어)
-            camera_input: 카메라 설정 (영어)
-            mood_input: 분위기 (영어)
+            style: 스타일 (Realistic Photography, Animation, 3D Pixar Style, etc.)
+            mood: 분위기 (Cinematic, Dreamy/Soft, Dark/Moody, etc.)
+            color: 색감 (Vibrant & Colorful, Monochrome/B&W, etc.)
+            lighting: 조명 (Golden Hour, Neon/Night City, etc.)
+            camera: 카메라 (Close-up, Wide Angle, Low Angle, etc.)
             max_retries: 최대 재시도 횟수
 
         Returns:
@@ -129,10 +131,11 @@ class GeminiImageGenerator:
         for cut in cuts:
             prompt = self._build_prompt_generation_request(
                 cut=cut,
-                style_type=style_type,
-                style_input=style_input,
-                camera_input=camera_input,
-                mood_input=mood_input
+                style=style,
+                mood=mood,
+                color=color,
+                lighting=lighting,
+                camera=camera
             )
 
             image_prompt = None
@@ -158,25 +161,39 @@ class GeminiImageGenerator:
     def _build_prompt_generation_request(
         self,
         cut: Dict,
-        style_type: str,
-        style_input: str,
-        camera_input: str,
-        mood_input: str
+        style: str,
+        mood: str,
+        color: str,
+        lighting: str,
+        camera: str
     ) -> str:
         """
         이미지 프롬프트 생성을 위한 요청 프롬프트 구성
         """
-        style_keyword = "anime style, 2D animation" if style_type == "애니메이션" else "photorealistic, live action"
+        # 스타일 설명 매핑
+        style_descriptions = {
+            "Realistic Photography": "photorealistic, live action photography, high detail realistic image",
+            "Animation": "anime style, 2D animation, illustrated",
+            "3D Pixar Style": "3D rendered, Pixar animation style, CGI, stylized 3D characters",
+            "Cyberpunk/Futuristic": "cyberpunk aesthetic, futuristic, neon-lit, sci-fi",
+            "Cinematic Movie Frame": "cinematic movie still, film grain, widescreen cinematic composition",
+            "Oil Painting": "oil painting style, artistic brush strokes, classical painting aesthetic"
+        }
 
-        additional_settings = []
-        if style_input:
-            additional_settings.append(f"Style: {style_input}")
-        if camera_input:
-            additional_settings.append(f"Camera: {camera_input}")
-        if mood_input:
-            additional_settings.append(f"Mood: {mood_input}")
+        # 색감 설명 매핑
+        color_descriptions = {
+            "Vibrant & Colorful": "vibrant colors, saturated, colorful",
+            "Monochrome/B&W": "black and white, monochrome, grayscale",
+            "Pastel/Soft": "pastel colors, soft tones, gentle hues",
+            "Warm Earthy Tones": "warm earthy tones, brown, orange, autumn colors",
+            "Cool Blue/Teal": "cool blue tones, teal, cyan color palette",
+            "High Contrast/Bold": "high contrast, bold colors, dramatic color contrast",
+            "Muted/Desaturated": "muted colors, desaturated, subdued palette",
+            "Vintage/Sepia": "vintage sepia tone, retro color grading, nostalgic warm tint"
+        }
 
-        additional_text = "\n".join(additional_settings) if additional_settings else "None specified"
+        style_keyword = style_descriptions.get(style, style)
+        color_keyword = color_descriptions.get(color, color)
 
         prompt = f"""You are an expert image prompt engineer for AI image generation.
 Based on the following video script scene description, create a detailed image generation prompt in English.
@@ -187,17 +204,20 @@ Narration (Korean): {cut['narration']}
 Time: {cut['time_range']}
 
 【Style Requirements】
-Base Style: {style_keyword}
-Additional Settings:
-{additional_text}
+- Visual Style: {style_keyword}
+- Mood/Atmosphere: {mood}
+- Color Palette: {color_keyword}
+- Lighting: {lighting}
+- Overall Camera Composition: The overall video uses {camera} shots as the primary camera style. Consider this when composing the scene, but you may vary slightly based on what works best for each specific scene.
 
 【Output Requirements】
 1. Write the prompt entirely in English
 2. Be specific about visual elements, composition, lighting, and atmosphere
 3. Include character descriptions if people are mentioned
 4. Describe the background and environment in detail
-5. Keep the prompt concise but comprehensive (2-4 sentences)
-6. Do NOT include any explanations, just output the image prompt directly
+5. Apply the specified style, mood, color, and lighting consistently
+6. Keep the prompt concise but comprehensive (2-4 sentences)
+7. Do NOT include any explanations, just output the image prompt directly
 
 【Output Format】
 Return ONLY the image generation prompt, nothing else. No quotes, no labels, just the prompt text."""

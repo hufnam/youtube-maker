@@ -7,6 +7,7 @@ from ttkbootstrap.scrolled import ScrolledFrame
 from youtube_analyzer import YouTubeTrendAnalyzer
 from gemini_script_generator import GeminiScriptGenerator
 from gemini_image_generator import GeminiImageGenerator
+from music_image_generator import MusicImageGenerator
 from config_manager import ConfigManager
 from prompt_template_manager import PromptTemplateManager
 from PIL import Image, ImageTk
@@ -43,11 +44,13 @@ class YouTubeMakerApp:
         # Gemini Script Generator 초기화 (선택적)
         self.gemini_generator = None
         self.gemini_image_generator = None
+        self.music_image_generator = None
         gemini_key = self.config_manager.load_gemini_api_key()
         if gemini_key:
             try:
                 self.gemini_generator = GeminiScriptGenerator(gemini_key)
                 self.gemini_image_generator = GeminiImageGenerator(gemini_key)
+                self.music_image_generator = MusicImageGenerator(gemini_key)
             except Exception as e:
                 print(f"Gemini 초기화 실패: {e}")
                 # Gemini는 선택적이므로 에러 무시
@@ -56,6 +59,7 @@ class YouTubeMakerApp:
 
         # 이미지 생성 관련 상태
         self.image_cuts_data = []  # 컷별 이미지 데이터 저장
+        self.music_cuts_data = []  # 음악 이미지 컷별 데이터 저장
 
         # 이미지 캐시
         self.image_cache = {}
@@ -320,7 +324,7 @@ API 키 발급 방법:
             ("🗂️ 정보 수집", "data_collector", "secondary"),
             ("📝 대본 생성", "script_generator", "secondary"),
             ("🎞️ 이미지 생성", "image_maker", "secondary"),
-            ("🎨 썸네일 생성", "thumbnail_maker", "secondary"),
+            ("🎵 음악 이미지 생성", "music_image_maker", "secondary"),
             ("🎬 영상 스크립트 생성", "video_script_generator", "secondary"),
             ("⚙️ 설정", "settings", "secondary"),
         ]
@@ -373,8 +377,8 @@ API 키 발급 방법:
             self.show_script_generator()
         elif tab_key == "image_maker":
             self.show_image_maker()
-        elif tab_key == "thumbnail_maker":
-            self.show_coming_soon("썸네일 생성")
+        elif tab_key == "music_image_maker":
+            self.show_music_image_maker()
         elif tab_key == "video_script_generator":
             self.show_coming_soon("영상 스크립트 생성")
         elif tab_key == "settings":
@@ -874,26 +878,26 @@ API 키 발급 방법:
                                    width=35)
         model_combo.grid(row=0, column=1, sticky=W, padx=(0, 20), pady=5)
 
-        # 스타일 타입 (애니메이션/실사)
+        # 스타일 선택
         ttk.Label(settings_grid,
                  text="스타일:",
                  font=('Helvetica', 10, 'bold')).grid(row=0, column=2, sticky=W, padx=(0, 10), pady=5)
 
-        self.style_type_var = tk.StringVar(value="애니메이션")
-        style_frame = ttk.Frame(settings_grid)
-        style_frame.grid(row=0, column=3, sticky=W, padx=(0, 10), pady=5)
-
-        ttk.Radiobutton(style_frame,
-                       text="애니메이션",
-                       variable=self.style_type_var,
-                       value="애니메이션",
-                       bootstyle="info-toolbutton").pack(side=LEFT, padx=(0, 5))
-
-        ttk.Radiobutton(style_frame,
-                       text="실사",
-                       variable=self.style_type_var,
-                       value="실사",
-                       bootstyle="info-toolbutton").pack(side=LEFT)
+        self.style_var = tk.StringVar(value="Animation")
+        style_options = [
+            "Realistic Photography",
+            "Animation",
+            "3D Pixar Style",
+            "Cyberpunk/Futuristic",
+            "Cinematic Movie Frame",
+            "Oil Painting"
+        ]
+        style_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.style_var,
+                                   values=style_options,
+                                   state="readonly",
+                                   width=22)
+        style_combo.grid(row=0, column=3, sticky=W, padx=(0, 10), pady=5)
 
         # 이미지 비율 선택
         ttk.Label(settings_grid,
@@ -916,45 +920,95 @@ API 키 발급 방법:
                        value="9:16",
                        bootstyle="warning-toolbutton").pack(side=LEFT)
 
-        # 두 번째 줄: 추가 설정
+        # 두 번째 줄: 분위기, 색감, 조명
         ttk.Label(settings_grid,
-                 text="추가 스타일 (영어):",
-                 font=('Helvetica', 10)).grid(row=1, column=0, sticky=W, padx=(0, 10), pady=5)
+                 text="분위기:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=0, sticky=W, padx=(0, 10), pady=5)
 
-        self.style_input_var = tk.StringVar()
-        ttk.Entry(settings_grid,
-                 textvariable=self.style_input_var,
-                 font=('Helvetica', 10),
-                 width=25).grid(row=1, column=1, sticky=W, padx=(0, 20), pady=5)
+        self.mood_var = tk.StringVar(value="Cinematic")
+        mood_options = [
+            "Cinematic",
+            "Dreamy/Soft",
+            "Dark/Moody",
+            "Energetic/Bright",
+            "Nostalgic/Retro",
+            "Epic & Grand",
+            "Minimalist"
+        ]
+        mood_combo = ttk.Combobox(settings_grid,
+                                  textvariable=self.mood_var,
+                                  values=mood_options,
+                                  state="readonly",
+                                  width=22)
+        mood_combo.grid(row=1, column=1, sticky=W, padx=(0, 20), pady=5)
 
         ttk.Label(settings_grid,
-                 text="카메라 (영어):",
-                 font=('Helvetica', 10)).grid(row=1, column=2, sticky=W, padx=(0, 10), pady=5)
+                 text="색감:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=2, sticky=W, padx=(0, 10), pady=5)
 
-        self.camera_input_var = tk.StringVar()
-        ttk.Entry(settings_grid,
-                 textvariable=self.camera_input_var,
-                 font=('Helvetica', 10),
-                 width=25).grid(row=1, column=3, sticky=W, padx=(0, 20), pady=5)
+        self.color_var = tk.StringVar(value="Vibrant & Colorful")
+        color_options = [
+            "Vibrant & Colorful",
+            "Monochrome/B&W",
+            "Pastel/Soft",
+            "Warm Earthy Tones",
+            "Cool Blue/Teal",
+            "High Contrast/Bold",
+            "Muted/Desaturated",
+            "Vintage/Sepia"
+        ]
+        color_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.color_var,
+                                   values=color_options,
+                                   state="readonly",
+                                   width=22)
+        color_combo.grid(row=1, column=3, sticky=W, padx=(0, 10), pady=5)
 
         ttk.Label(settings_grid,
-                 text="분위기 (영어):",
-                 font=('Helvetica', 10)).grid(row=1, column=4, sticky=W, padx=(0, 10), pady=5)
+                 text="조명:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=4, sticky=W, padx=(0, 10), pady=5)
 
-        self.mood_input_var = tk.StringVar()
-        ttk.Entry(settings_grid,
-                 textvariable=self.mood_input_var,
-                 font=('Helvetica', 10),
-                 width=25).grid(row=1, column=5, sticky=W, pady=5)
+        self.lighting_var = tk.StringVar(value="Natural Sunlight")
+        lighting_options = [
+            "Golden Hour",
+            "Neon/Night City",
+            "Studio Softbox",
+            "Natural Sunlight",
+            "Dramatic Rim Light"
+        ]
+        lighting_combo = ttk.Combobox(settings_grid,
+                                      textvariable=self.lighting_var,
+                                      values=lighting_options,
+                                      state="readonly",
+                                      width=22)
+        lighting_combo.grid(row=1, column=5, sticky=W, pady=5)
+
+        # 세 번째 줄: 카메라
+        ttk.Label(settings_grid,
+                 text="카메라:",
+                 font=('Helvetica', 10, 'bold')).grid(row=2, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.camera_var = tk.StringVar(value="Wide Angle")
+        camera_options = [
+            "Close-up",
+            "Wide Angle",
+            "Low Angle (Heroic)",
+            "Top Down (Flat Lay)",
+            "Bokeh/Macro",
+            "First-Person (POV)"
+        ]
+        camera_combo = ttk.Combobox(settings_grid,
+                                    textvariable=self.camera_var,
+                                    values=camera_options,
+                                    state="readonly",
+                                    width=22)
+        camera_combo.grid(row=2, column=1, sticky=W, padx=(0, 20), pady=5)
 
         # 힌트 레이블
-        hint_frame = ttk.Frame(settings_frame)
-        hint_frame.pack(fill=X, pady=(10, 0))
-
-        ttk.Label(hint_frame,
-                 text="💡 추가 설정은 선택사항입니다. 예) Style: cyberpunk, neon | Camera: close-up shot | Mood: dramatic, cinematic",
+        ttk.Label(settings_grid,
+                 text="💡 카메라 설정은 전반적인 영상 구성에 적용됩니다",
                  font=('Helvetica', 9),
-                 bootstyle="secondary").pack(anchor=W)
+                 bootstyle="secondary").grid(row=2, column=2, columnspan=4, sticky=W, pady=5)
 
         # ========== 기능 2: 대본 입력 영역 ==========
         script_frame = ttk.LabelFrame(main_scroll,
@@ -1079,10 +1133,11 @@ API 키 발급 방법:
 
                 cuts_with_prompts = self.gemini_image_generator.generate_image_prompts(
                     cuts=cuts,
-                    style_type=self.style_type_var.get(),
-                    style_input=self.style_input_var.get(),
-                    camera_input=self.camera_input_var.get(),
-                    mood_input=self.mood_input_var.get()
+                    style=self.style_var.get(),
+                    mood=self.mood_var.get(),
+                    color=self.color_var.get(),
+                    lighting=self.lighting_var.get(),
+                    camera=self.camera_var.get()
                 )
 
                 # 2단계: 이미지 생성
@@ -1377,6 +1432,784 @@ API 키 발급 방법:
         # 데이터 초기화
         self.image_cuts_data = []
         self.image_progress_var.set("")
+
+    def show_music_image_maker(self):
+        """음악 이미지 생성 화면"""
+        # Gemini API 키 확인
+        if not self.music_image_generator:
+            self.show_gemini_setup_required()
+            return
+
+        # 메인 컨테이너
+        container = ttk.Frame(self.content_frame, padding="15")
+        container.pack(fill=BOTH, expand=YES)
+
+        # 헤더
+        header_frame = ttk.Frame(container)
+        header_frame.pack(fill=X, pady=(0, 15))
+
+        ttk.Label(header_frame,
+                 text="🎵 음악 이미지 생성",
+                 font=('Helvetica', 18, 'bold'),
+                 bootstyle="primary").pack(anchor=W)
+
+        ttk.Label(header_frame,
+                 text="가사를 입력하면 각 줄에 맞는 이미지를 AI가 자동 생성합니다",
+                 font=('Helvetica', 10),
+                 bootstyle="secondary").pack(anchor=W, pady=(5, 0))
+
+        # 스크롤 가능한 메인 컨테이너
+        main_scroll = ScrolledFrame(container, autohide=True)
+        main_scroll.pack(fill=BOTH, expand=YES)
+
+        # ========== 기능 1: 곡 정보 및 컨셉 ==========
+        music_info_frame = ttk.LabelFrame(main_scroll,
+                                          text="🎶 곡 정보 및 컨셉",
+                                          padding="15",
+                                          bootstyle="info")
+        music_info_frame.pack(fill=X, pady=(0, 15))
+
+        # 곡 정보 그리드
+        info_grid = ttk.Frame(music_info_frame)
+        info_grid.pack(fill=X)
+        info_grid.columnconfigure(1, weight=1)
+        info_grid.columnconfigure(3, weight=1)
+
+        # 곡 제목
+        ttk.Label(info_grid,
+                 text="곡 제목:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_title_var = tk.StringVar()
+        title_entry = ttk.Entry(info_grid,
+                               textvariable=self.music_title_var,
+                               font=('Helvetica', 10),
+                               width=40)
+        title_entry.grid(row=0, column=1, sticky=W, padx=(0, 20), pady=5)
+        title_entry.insert(0, "예: Dynamite")
+
+        # 비주얼 컨셉/테마
+        ttk.Label(info_grid,
+                 text="비주얼 컨셉/테마:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_concept_var = tk.StringVar()
+        concept_entry = ttk.Entry(info_grid,
+                                 textvariable=self.music_concept_var,
+                                 font=('Helvetica', 10),
+                                 width=80)
+        concept_entry.grid(row=1, column=1, columnspan=3, sticky=W, pady=5)
+        concept_entry.insert(0, "예: 비오는 사이버펑크 도시에서 추격전, 노을 지는 해변가에서 피아노 연주, 우주를 유영하는 고래")
+
+        # 가사 입력
+        lyrics_frame = ttk.Frame(music_info_frame)
+        lyrics_frame.pack(fill=X, pady=(10, 0))
+
+        ttk.Label(lyrics_frame,
+                 text="가사:",
+                 font=('Helvetica', 10, 'bold')).pack(anchor=W)
+
+        ttk.Label(lyrics_frame,
+                 text="줄바꿈을 기준으로 컷 이미지를 생성합니다.",
+                 font=('Helvetica', 9),
+                 bootstyle="secondary").pack(anchor=W, pady=(0, 5))
+
+        self.music_lyrics_text = scrolledtext.ScrolledText(lyrics_frame,
+                                                           font=('Helvetica', 10),
+                                                           wrap=tk.WORD,
+                                                           height=8)
+        self.music_lyrics_text.pack(fill=X, pady=(0, 10))
+        self.music_lyrics_text.configure(spacing1=2, spacing2=2, spacing3=2)
+        self.music_lyrics_text.insert("1.0", "여기에 가사를 입력하세요.\n각 줄마다 하나의 이미지가 생성됩니다.\n빈 줄은 무시됩니다.")
+
+        # 장르, 템포, 곡 무드 선택
+        options_frame = ttk.Frame(music_info_frame)
+        options_frame.pack(fill=X, pady=(10, 0))
+
+        # 장르 선택
+        genre_frame = ttk.LabelFrame(options_frame, text="장르", padding="5")
+        genre_frame.pack(side=LEFT, padx=(0, 15))
+
+        self.music_genre_var = tk.StringVar(value="Pop")
+        genre_options = ["Pop", "K-Pop", "Jazz/Blues", "Folk", "R&B", "Hip-Hop",
+                        "Rock/Alternative", "EDM", "Classical/Orchestral", "Ambient/Chill"]
+
+        genre_combo = ttk.Combobox(genre_frame,
+                                   textvariable=self.music_genre_var,
+                                   values=genre_options,
+                                   state="readonly",
+                                   width=18)
+        genre_combo.pack()
+
+        # 템포 선택
+        tempo_frame = ttk.LabelFrame(options_frame, text="템포", padding="5")
+        tempo_frame.pack(side=LEFT, padx=(0, 15))
+
+        self.music_tempo_var = tk.StringVar(value="Moderate")
+        tempo_options = ["Slow", "Moderate", "Fast", "Intense"]
+
+        tempo_btn_frame = ttk.Frame(tempo_frame)
+        tempo_btn_frame.pack()
+        for tempo in tempo_options:
+            ttk.Radiobutton(tempo_btn_frame,
+                           text=tempo,
+                           variable=self.music_tempo_var,
+                           value=tempo,
+                           bootstyle="info-toolbutton").pack(side=LEFT, padx=2)
+
+        # 곡 무드 선택
+        mood_frame = ttk.LabelFrame(options_frame, text="곡 무드", padding="5")
+        mood_frame.pack(side=LEFT)
+
+        self.music_mood_var = tk.StringVar(value="Euphoric/Uplifting")
+        music_mood_options = ["Euphoric/Uplifting", "Melancholic/Emotional", "Dreamy/Ethereal",
+                             "Dark/Intense", "Calm/Peaceful", "Romantic/Sentimental", "Mysterious/Enigmatic"]
+
+        music_mood_combo = ttk.Combobox(mood_frame,
+                                        textvariable=self.music_mood_var,
+                                        values=music_mood_options,
+                                        state="readonly",
+                                        width=22)
+        music_mood_combo.pack()
+
+        # ========== 기능 2: 이미지 생성 설정 ==========
+        settings_frame = ttk.LabelFrame(main_scroll,
+                                       text="⚙️ 이미지 생성 설정",
+                                       padding="15",
+                                       bootstyle="primary")
+        settings_frame.pack(fill=X, pady=(0, 15))
+
+        # 설정 그리드
+        settings_grid = ttk.Frame(settings_frame)
+        settings_grid.pack(fill=X)
+        settings_grid.columnconfigure(1, weight=1)
+        settings_grid.columnconfigure(3, weight=1)
+        settings_grid.columnconfigure(5, weight=1)
+
+        # 모델 선택
+        ttk.Label(settings_grid,
+                 text="모델:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_image_model_var = tk.StringVar(value="gemini-2.5-flash-image")
+        model_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.music_image_model_var,
+                                   values=["gemini-2.5-flash-image", "gemini-3-pro-image-preview"],
+                                   state="readonly",
+                                   width=35)
+        model_combo.grid(row=0, column=1, sticky=W, padx=(0, 20), pady=5)
+
+        # 스타일 선택
+        ttk.Label(settings_grid,
+                 text="스타일:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=2, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_style_var = tk.StringVar(value="Animation")
+        style_options = [
+            "Realistic Photography",
+            "Animation",
+            "3D Pixar Style",
+            "Cyberpunk/Futuristic",
+            "Cinematic Movie Frame",
+            "Oil Painting"
+        ]
+        style_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.music_style_var,
+                                   values=style_options,
+                                   state="readonly",
+                                   width=22)
+        style_combo.grid(row=0, column=3, sticky=W, padx=(0, 10), pady=5)
+
+        # 이미지 비율 선택
+        ttk.Label(settings_grid,
+                 text="비율:",
+                 font=('Helvetica', 10, 'bold')).grid(row=0, column=4, sticky=W, padx=(10, 10), pady=5)
+
+        self.music_aspect_ratio_var = tk.StringVar(value="16:9")
+        ratio_frame = ttk.Frame(settings_grid)
+        ratio_frame.grid(row=0, column=5, sticky=W, pady=5)
+
+        ttk.Radiobutton(ratio_frame,
+                       text="롱폼 (16:9)",
+                       variable=self.music_aspect_ratio_var,
+                       value="16:9",
+                       bootstyle="warning-toolbutton").pack(side=LEFT, padx=(0, 5))
+
+        ttk.Radiobutton(ratio_frame,
+                       text="숏폼 (9:16)",
+                       variable=self.music_aspect_ratio_var,
+                       value="9:16",
+                       bootstyle="warning-toolbutton").pack(side=LEFT)
+
+        # 두 번째 줄: 분위기, 색감, 조명
+        ttk.Label(settings_grid,
+                 text="분위기:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_visual_mood_var = tk.StringVar(value="Cinematic")
+        visual_mood_options = [
+            "Cinematic",
+            "Dreamy/Soft",
+            "Dark/Moody",
+            "Energetic/Bright",
+            "Nostalgic/Retro",
+            "Epic & Grand",
+            "Minimalist"
+        ]
+        mood_combo = ttk.Combobox(settings_grid,
+                                  textvariable=self.music_visual_mood_var,
+                                  values=visual_mood_options,
+                                  state="readonly",
+                                  width=22)
+        mood_combo.grid(row=1, column=1, sticky=W, padx=(0, 20), pady=5)
+
+        ttk.Label(settings_grid,
+                 text="색감:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=2, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_color_var = tk.StringVar(value="Vibrant & Colorful")
+        color_options = [
+            "Vibrant & Colorful",
+            "Monochrome/B&W",
+            "Pastel/Soft",
+            "Warm Earthy Tones",
+            "Cool Blue/Teal",
+            "High Contrast/Bold",
+            "Muted/Desaturated",
+            "Vintage/Sepia"
+        ]
+        color_combo = ttk.Combobox(settings_grid,
+                                   textvariable=self.music_color_var,
+                                   values=color_options,
+                                   state="readonly",
+                                   width=22)
+        color_combo.grid(row=1, column=3, sticky=W, padx=(0, 10), pady=5)
+
+        ttk.Label(settings_grid,
+                 text="조명:",
+                 font=('Helvetica', 10, 'bold')).grid(row=1, column=4, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_lighting_var = tk.StringVar(value="Natural Sunlight")
+        lighting_options = [
+            "Golden Hour",
+            "Neon/Night City",
+            "Studio Softbox",
+            "Natural Sunlight",
+            "Dramatic Rim Light"
+        ]
+        lighting_combo = ttk.Combobox(settings_grid,
+                                      textvariable=self.music_lighting_var,
+                                      values=lighting_options,
+                                      state="readonly",
+                                      width=22)
+        lighting_combo.grid(row=1, column=5, sticky=W, pady=5)
+
+        # 세 번째 줄: 카메라
+        ttk.Label(settings_grid,
+                 text="카메라:",
+                 font=('Helvetica', 10, 'bold')).grid(row=2, column=0, sticky=W, padx=(0, 10), pady=5)
+
+        self.music_camera_var = tk.StringVar(value="Wide Angle")
+        camera_options = [
+            "Close-up",
+            "Wide Angle",
+            "Low Angle (Heroic)",
+            "Top Down (Flat Lay)",
+            "Bokeh/Macro",
+            "First-Person (POV)"
+        ]
+        camera_combo = ttk.Combobox(settings_grid,
+                                    textvariable=self.music_camera_var,
+                                    values=camera_options,
+                                    state="readonly",
+                                    width=22)
+        camera_combo.grid(row=2, column=1, sticky=W, padx=(0, 20), pady=5)
+
+        # 힌트 레이블
+        ttk.Label(settings_grid,
+                 text="💡 카메라 설정은 전반적인 영상 구성에 적용됩니다",
+                 font=('Helvetica', 9),
+                 bootstyle="secondary").grid(row=2, column=2, columnspan=4, sticky=W, pady=5)
+
+        # 버튼 프레임
+        button_frame = ttk.Frame(main_scroll)
+        button_frame.pack(fill=X, pady=(0, 15))
+
+        self.music_generate_btn = ttk.Button(button_frame,
+                                              text="✨ 이미지 생성",
+                                              command=self.start_music_image_generation,
+                                              bootstyle="success",
+                                              width=25)
+        self.music_generate_btn.pack(side=LEFT, padx=(0, 10))
+
+        ttk.Button(button_frame,
+                  text="🗑️ 초기화",
+                  command=self.clear_music_image_generation,
+                  bootstyle="danger-outline",
+                  width=15).pack(side=LEFT)
+
+        # 진행 상태
+        self.music_progress_var = tk.StringVar(value="")
+        self.music_progress_label = ttk.Label(button_frame,
+                                              textvariable=self.music_progress_var,
+                                              font=('Helvetica', 10),
+                                              bootstyle="info")
+        self.music_progress_label.pack(side=LEFT, padx=(20, 0))
+
+        # ========== 기능 3: 결과 표시 영역 ==========
+        results_frame = ttk.LabelFrame(main_scroll,
+                                      text="🖼️ 생성 결과 (컷별 이미지)",
+                                      padding="15",
+                                      bootstyle="success")
+        results_frame.pack(fill=BOTH, expand=YES, pady=(0, 10))
+
+        # 전체 저장 버튼
+        save_all_frame = ttk.Frame(results_frame)
+        save_all_frame.pack(fill=X, pady=(0, 10))
+
+        ttk.Button(save_all_frame,
+                  text="💾 전체 이미지 저장",
+                  command=self.save_all_music_images,
+                  bootstyle="success",
+                  width=20).pack(side=LEFT)
+
+        ttk.Label(save_all_frame,
+                 text="생성된 모든 이미지를 한 번에 저장합니다",
+                 font=('Helvetica', 9),
+                 bootstyle="secondary").pack(side=LEFT, padx=(10, 0))
+
+        # 결과 컨테이너 (스크롤 가능)
+        self.music_results_container = ttk.Frame(results_frame)
+        self.music_results_container.pack(fill=BOTH, expand=YES)
+
+        # 초기 메시지
+        self.music_initial_message = ttk.Label(self.music_results_container,
+                                               text="가사를 입력하고 '이미지 생성' 버튼을 클릭하세요.\n생성된 이미지가 여기에 컷별로 표시됩니다.",
+                                               font=('Helvetica', 11),
+                                               bootstyle="secondary",
+                                               justify=CENTER)
+        self.music_initial_message.pack(pady=50)
+
+        # 음악 이미지 데이터 초기화
+        self.music_cuts_data = []
+
+    def start_music_image_generation(self):
+        """음악 이미지 생성 프로세스 시작"""
+        lyrics = self.music_lyrics_text.get("1.0", tk.END).strip()
+
+        if not lyrics or lyrics.startswith("여기에 가사를"):
+            messagebox.showwarning("경고", "가사를 입력해주세요.")
+            return
+
+        # 가사를 줄 단위로 파싱 (빈 줄 제외)
+        lyrics_lines = [line.strip() for line in lyrics.split('\n') if line.strip()]
+
+        if not lyrics_lines:
+            messagebox.showwarning("경고", "유효한 가사가 없습니다.")
+            return
+
+        # 곡 정보 수집
+        song_title = self.music_title_var.get().strip()
+        if song_title.startswith("예:"):
+            song_title = ""
+
+        visual_concept = self.music_concept_var.get().strip()
+        if visual_concept.startswith("예:"):
+            visual_concept = ""
+
+        genre = self.music_genre_var.get()
+        tempo = self.music_tempo_var.get()
+        music_mood = self.music_mood_var.get()
+
+        # 버튼 비활성화
+        self.music_generate_btn.config(state=tk.DISABLED)
+        self.music_progress_var.set(f"총 {len(lyrics_lines)}개 컷 처리 중...")
+
+        def run_generation():
+            try:
+                results = []
+                total = len(lyrics_lines)
+
+                for i, lyric_line in enumerate(lyrics_lines):
+                    self.music_progress_var.set(f"컷 {i+1}/{total} 프롬프트 생성 중...")
+
+                    # 프롬프트 생성
+                    image_prompt = self.generate_music_image_prompt(
+                        lyric_line=lyric_line,
+                        song_title=song_title,
+                        visual_concept=visual_concept,
+                        genre=genre,
+                        tempo=tempo,
+                        music_mood=music_mood,
+                        style=self.music_style_var.get(),
+                        visual_mood=self.music_visual_mood_var.get(),
+                        color=self.music_color_var.get(),
+                        lighting=self.music_lighting_var.get(),
+                        camera=self.music_camera_var.get()
+                    )
+
+                    self.music_progress_var.set(f"컷 {i+1}/{total} 이미지 생성 중...")
+
+                    # 이미지 생성
+                    image, error = self.gemini_image_generator.generate_single_image(
+                        prompt=image_prompt,
+                        model=self.music_image_model_var.get(),
+                        aspect_ratio=self.music_aspect_ratio_var.get()
+                    )
+
+                    results.append({
+                        'cut_number': i + 1,
+                        'lyrics': lyric_line,
+                        'image_prompt': image_prompt,
+                        'generated_image': image,
+                        'image_error': error
+                    })
+
+                    # API 호출 간 딜레이
+                    if i < total - 1:
+                        import time
+                        time.sleep(1)
+
+                # UI 업데이트
+                self.root.after(0, lambda: self.display_music_image_results(results))
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("오류", f"이미지 생성 실패:\n{str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.music_generate_btn.config(state=tk.NORMAL))
+                self.root.after(0, lambda: self.music_progress_var.set(""))
+
+        threading.Thread(target=run_generation, daemon=True).start()
+
+    def generate_music_image_prompt(self, lyric_line, song_title, visual_concept, genre, tempo,
+                                    music_mood, style, visual_mood, color, lighting, camera):
+        """음악 이미지 생성을 위한 프롬프트 생성"""
+        # 스타일 설명 매핑
+        style_descriptions = {
+            "Realistic Photography": "photorealistic, live action photography, high detail realistic image",
+            "Animation": "anime style, 2D animation, illustrated",
+            "3D Pixar Style": "3D rendered, Pixar animation style, CGI, stylized 3D characters",
+            "Cyberpunk/Futuristic": "cyberpunk aesthetic, futuristic, neon-lit, sci-fi",
+            "Cinematic Movie Frame": "cinematic movie still, film grain, widescreen cinematic composition",
+            "Oil Painting": "oil painting style, artistic brush strokes, classical painting aesthetic"
+        }
+
+        # 색감 설명 매핑
+        color_descriptions = {
+            "Vibrant & Colorful": "vibrant colors, saturated, colorful",
+            "Monochrome/B&W": "black and white, monochrome, grayscale",
+            "Pastel/Soft": "pastel colors, soft tones, gentle hues",
+            "Warm Earthy Tones": "warm earthy tones, brown, orange, autumn colors",
+            "Cool Blue/Teal": "cool blue tones, teal, cyan color palette",
+            "High Contrast/Bold": "high contrast, bold colors, dramatic color contrast",
+            "Muted/Desaturated": "muted colors, desaturated, subdued palette",
+            "Vintage/Sepia": "vintage sepia tone, retro color grading, nostalgic warm tint"
+        }
+
+        # 템포 설명 매핑
+        tempo_descriptions = {
+            "Slow": "slow, gentle movement, peaceful pace",
+            "Moderate": "moderate tempo, balanced rhythm",
+            "Fast": "fast paced, dynamic movement, energetic",
+            "Intense": "intense, powerful, dramatic action"
+        }
+
+        # 음악 무드 설명 매핑
+        music_mood_descriptions = {
+            "Euphoric/Uplifting": "euphoric, uplifting, joyful atmosphere",
+            "Melancholic/Emotional": "melancholic, emotional, touching, bittersweet",
+            "Dreamy/Ethereal": "dreamy, ethereal, floating, surreal",
+            "Dark/Intense": "dark, intense, dramatic, powerful",
+            "Calm/Peaceful": "calm, peaceful, serene, tranquil",
+            "Romantic/Sentimental": "romantic, sentimental, warm, intimate",
+            "Mysterious/Enigmatic": "mysterious, enigmatic, intriguing, atmospheric"
+        }
+
+        style_keyword = style_descriptions.get(style, style)
+        color_keyword = color_descriptions.get(color, color)
+        tempo_keyword = tempo_descriptions.get(tempo, tempo)
+        mood_keyword = music_mood_descriptions.get(music_mood, music_mood)
+
+        prompt = f"""You are an expert image prompt engineer for AI image generation.
+Create a detailed image generation prompt for a music video visual based on the following lyrics and music information.
+
+【Lyrics Line】
+{lyric_line}
+
+【Music Information】
+- Song Title: {song_title if song_title else 'Not specified'}
+- Genre: {genre}
+- Tempo: {tempo_keyword}
+- Mood: {mood_keyword}
+- Visual Concept/Theme: {visual_concept if visual_concept else 'Create appropriate visuals based on the lyrics'}
+
+【Visual Style Requirements】
+- Visual Style: {style_keyword}
+- Atmosphere: {visual_mood}
+- Color Palette: {color_keyword}
+- Lighting: {lighting}
+- Camera: {camera}
+
+【Output Requirements】
+1. Write the prompt entirely in English
+2. Create a vivid visual scene that represents the emotion and meaning of the lyrics
+3. Incorporate the music's mood, tempo, and genre into the visual atmosphere
+4. If visual concept is provided, integrate it with the lyrics meaning
+5. Include specific details about composition, colors, lighting, and atmosphere
+6. Keep the prompt concise but comprehensive (2-4 sentences)
+7. Do NOT include any explanations, just output the image prompt directly
+
+【Output Format】
+Return ONLY the image generation prompt, nothing else. No quotes, no labels, just the prompt text."""
+
+        try:
+            response = self.gemini_image_generator.text_model.generate_content(prompt)
+            return response.text.strip()
+        except Exception as e:
+            # 기본 프롬프트 반환
+            return f"{style_keyword}, {lyric_line}, {mood_keyword}, {color_keyword}, {lighting} lighting, {camera} shot"
+
+    def display_music_image_results(self, results):
+        """음악 이미지 생성 결과 표시"""
+        # 기존 내용 삭제
+        for widget in self.music_results_container.winfo_children():
+            widget.destroy()
+
+        self.music_cuts_data = results
+
+        if not results:
+            ttk.Label(self.music_results_container,
+                     text="생성된 결과가 없습니다.",
+                     font=('Helvetica', 11),
+                     bootstyle="warning").pack(pady=50)
+            return
+
+        # 각 컷별 결과 표시
+        for i, cut in enumerate(results):
+            self.create_music_cut_result_card(self.music_results_container, cut, i)
+
+    def create_music_cut_result_card(self, parent, cut, index):
+        """개별 음악 컷 결과 카드 생성"""
+        # 카드 프레임
+        card = ttk.LabelFrame(parent,
+                             text=f"CUT {cut['cut_number']}",
+                             padding="10",
+                             bootstyle="info")
+        card.pack(fill=X, pady=(0, 15))
+
+        # 3분할 레이아웃: 가사 | 프롬프트 | 이미지
+        content_frame = ttk.Frame(card)
+        content_frame.pack(fill=X)
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(1, weight=1)
+        content_frame.columnconfigure(2, weight=0)
+
+        # 왼쪽: 가사 정보
+        lyrics_frame = ttk.Frame(content_frame)
+        lyrics_frame.grid(row=0, column=0, sticky=(N, S, W, E), padx=(0, 10))
+
+        ttk.Label(lyrics_frame,
+                 text="🎵 가사",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="primary").pack(anchor=W)
+
+        lyrics_text = scrolledtext.ScrolledText(lyrics_frame,
+                                                font=('Helvetica', 10),
+                                                wrap=tk.WORD,
+                                                height=12,
+                                                width=35)
+        lyrics_text.pack(fill=X, pady=(5, 0))
+        lyrics_text.insert("1.0", cut['lyrics'])
+        lyrics_text.config(state=tk.DISABLED)
+        lyrics_text.configure(spacing1=3, spacing2=3, spacing3=3)
+
+        # 중앙: 프롬프트 (편집 가능)
+        prompt_frame = ttk.Frame(content_frame)
+        prompt_frame.grid(row=0, column=1, sticky=(N, S, W, E), padx=(0, 10))
+
+        ttk.Label(prompt_frame,
+                 text="🎨 이미지 프롬프트 (편집 가능)",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="success").pack(anchor=W)
+
+        prompt_text = scrolledtext.ScrolledText(prompt_frame,
+                                                font=('Helvetica', 10),
+                                                wrap=tk.WORD,
+                                                height=12,
+                                                width=40)
+        prompt_text.pack(fill=X, pady=(5, 5))
+        prompt_text.configure(spacing1=3, spacing2=3, spacing3=3)
+        prompt_text.insert("1.0", cut.get('image_prompt', '프롬프트 생성 실패'))
+
+        # 재생성 버튼
+        regen_btn = ttk.Button(prompt_frame,
+                              text="🔄 이미지 재생성",
+                              command=lambda idx=index, pt=prompt_text: self.regenerate_single_music_image(idx, pt),
+                              bootstyle="warning-outline",
+                              width=18)
+        regen_btn.pack(anchor=W)
+
+        # 오른쪽: 이미지
+        image_frame = ttk.Frame(content_frame)
+        image_frame.grid(row=0, column=2, sticky=(N, S, W, E))
+
+        ttk.Label(image_frame,
+                 text="🖼️ 생성 이미지",
+                 font=('Helvetica', 10, 'bold'),
+                 bootstyle="info").pack(anchor=W)
+
+        # 이미지 표시 영역
+        image_display = ttk.Label(image_frame, text="")
+        image_display.pack(pady=(5, 5))
+
+        if cut.get('generated_image'):
+            # PIL Image를 PhotoImage로 변환
+            img = cut['generated_image']
+            # 썸네일 크기로 리사이즈
+            img_display = img.copy()
+            img_display.thumbnail((256, 256), Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(img_display)
+            image_display.config(image=photo)
+            image_display.image = photo  # 참조 유지
+
+            # 이미지 인덱스 저장 (저장시 사용)
+            image_display.cut_index = index
+        elif cut.get('image_error'):
+            image_display.config(text=f"❌ {cut['image_error'][:50]}...",
+                               font=('Helvetica', 9),
+                               bootstyle="danger")
+        else:
+            image_display.config(text="이미지 없음",
+                               font=('Helvetica', 10),
+                               bootstyle="secondary")
+
+        # 개별 저장 버튼
+        ttk.Button(image_frame,
+                  text="💾 저장",
+                  command=lambda idx=index: self.save_single_music_image(idx),
+                  bootstyle="success-outline",
+                  width=10).pack(anchor=W)
+
+    def regenerate_single_music_image(self, cut_index, prompt_text_widget):
+        """단일 음악 컷 이미지 재생성"""
+        new_prompt = prompt_text_widget.get("1.0", tk.END).strip()
+
+        if not new_prompt:
+            messagebox.showwarning("경고", "프롬프트를 입력해주세요.")
+            return
+
+        self.music_progress_var.set(f"컷 {cut_index + 1} 이미지 재생성 중...")
+
+        def run_regeneration():
+            try:
+                cut = self.music_cuts_data[cut_index]
+
+                image, error = self.gemini_image_generator.generate_single_image(
+                    prompt=new_prompt,
+                    model=self.music_image_model_var.get(),
+                    aspect_ratio=self.music_aspect_ratio_var.get()
+                )
+
+                cut['image_prompt'] = new_prompt
+                cut['generated_image'] = image
+                cut['image_error'] = error
+                self.music_cuts_data[cut_index] = cut
+
+                # UI 업데이트
+                self.root.after(0, lambda: self.display_music_image_results(self.music_cuts_data))
+
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("오류", f"재생성 실패:\n{str(e)}"))
+            finally:
+                self.root.after(0, lambda: self.music_progress_var.set(""))
+
+        threading.Thread(target=run_regeneration, daemon=True).start()
+
+    def save_single_music_image(self, cut_index):
+        """단일 음악 이미지 저장"""
+        from tkinter import filedialog
+
+        if cut_index >= len(self.music_cuts_data):
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        cut = self.music_cuts_data[cut_index]
+        if not cut.get('generated_image'):
+            messagebox.showwarning("경고", "이 컷에는 생성된 이미지가 없습니다.")
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("PNG 파일", "*.png"), ("JPEG 파일", "*.jpg"), ("모든 파일", "*.*")],
+            initialfile=f"music_cut_{cut['cut_number']}.png"
+        )
+
+        if file_path:
+            try:
+                cut['generated_image'].save(file_path)
+                messagebox.showinfo("완료", f"이미지가 저장되었습니다:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"저장 실패:\n{str(e)}")
+
+    def save_all_music_images(self):
+        """모든 음악 이미지 일괄 저장"""
+        from tkinter import filedialog
+
+        if not self.music_cuts_data:
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        # 저장할 이미지가 있는지 확인
+        images_to_save = [cut for cut in self.music_cuts_data if cut.get('generated_image')]
+
+        if not images_to_save:
+            messagebox.showwarning("경고", "저장할 이미지가 없습니다.")
+            return
+
+        # 폴더 선택
+        folder_path = filedialog.askdirectory(title="이미지 저장 폴더 선택")
+
+        if folder_path:
+            try:
+                import os
+                saved_count = 0
+
+                for cut in images_to_save:
+                    file_path = os.path.join(folder_path, f"music_cut_{cut['cut_number']:02d}.png")
+                    cut['generated_image'].save(file_path)
+                    saved_count += 1
+
+                messagebox.showinfo("완료", f"{saved_count}개 이미지가 저장되었습니다:\n{folder_path}")
+            except Exception as e:
+                messagebox.showerror("오류", f"저장 실패:\n{str(e)}")
+
+    def clear_music_image_generation(self):
+        """음악 이미지 생성 초기화"""
+        # 텍스트 초기화
+        self.music_lyrics_text.delete("1.0", tk.END)
+        self.music_lyrics_text.insert("1.0", "여기에 가사를 입력하세요.\n각 줄마다 하나의 이미지가 생성됩니다.\n빈 줄은 무시됩니다.")
+
+        # 곡 정보 초기화
+        self.music_title_var.set("예: Dynamite")
+        self.music_concept_var.set("예: 비오는 사이버펑크 도시에서 추격전, 노을 지는 해변가에서 피아노 연주, 우주를 유영하는 고래")
+        self.music_genre_var.set("Pop")
+        self.music_tempo_var.set("Moderate")
+        self.music_mood_var.set("Euphoric/Uplifting")
+
+        # 결과 영역 초기화
+        for widget in self.music_results_container.winfo_children():
+            widget.destroy()
+
+        self.music_initial_message = ttk.Label(self.music_results_container,
+                                               text="가사를 입력하고 '이미지 생성' 버튼을 클릭하세요.\n생성된 이미지가 여기에 컷별로 표시됩니다.",
+                                               font=('Helvetica', 11),
+                                               bootstyle="secondary",
+                                               justify=CENTER)
+        self.music_initial_message.pack(pady=50)
+
+        # 데이터 초기화
+        self.music_cuts_data = []
+        self.music_progress_var.set("")
 
     def generate_script(self, topic, duration, tone, audience, additional, result_text):
         """대본 생성 실행"""
