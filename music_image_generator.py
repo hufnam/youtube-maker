@@ -189,6 +189,7 @@ Create a detailed image generation prompt for a music video visual based on the 
 5. Include specific details about composition, colors, lighting, and atmosphere
 6. Keep the prompt concise but comprehensive (2-4 sentences)
 7. Do NOT include any explanations, just output the image prompt directly
+8. CRITICAL: The image must contain NO TEXT, NO LETTERS, NO WORDS, NO CAPTIONS, NO SUBTITLES, NO WATERMARKS, NO WRITING of any kind. This is a pure visual image without any textual elements.
 
 【Output Format】
 Return ONLY the image generation prompt, nothing else. No quotes, no labels, just the prompt text."""
